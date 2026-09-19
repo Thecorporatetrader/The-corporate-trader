@@ -5,7 +5,7 @@ import { contact } from '@/lib/contact';
 
 export const metadata: Metadata = {
   title: 'Get Your Free TCT Algo — The Corporate Trader',
-  description: 'Get the free 90%-automated TCT MT5 algo, explore full automation at ₹19,999, or share your strategy for a free custom algo build.',
+  description: 'Get the free 100%-automated TCT MT5 algo, explore full automation at ₹19,999, or share your strategy for a free custom algo build.',
 };
 
 const features = [
