@@ -737,10 +737,11 @@
 }
 
 /* Trading Journal heading and Android app access. */
-.hero-comparison-image { position: relative; z-index: 1; width: 100%; min-width: 0; overflow: hidden; border: 1px solid rgba(0,240,255,.25); border-radius: 18px; background: #06121b; }
-.hero-comparison-image img { display: block; width: 100%; height: auto; }
-.hero.container { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 30px; padding-top: 70px; padding-bottom: 55px; }
-.hero-comparison-image { align-self: stretch; display: flex; align-items: center; }
+/* Increase the image column from 1/2.15 to 1.2/2.15 (+20%).
+   The adjusted aspect ratio gives +30% image height without letterboxing. */
+.hero-comparison-image { position: relative; z-index: 1; width: 100%; min-width: 0; align-self: center; }
+.hero-comparison-image img { display: block; width: 100%; height: auto; aspect-ratio: 1244.4 / 734.5; object-fit: cover; border: 1px solid rgba(255,255,255,.8); border-radius: 12px; }
+.hero.container { grid-template-columns: minmax(0, .95fr) minmax(0, 1.2fr); gap: 30px; padding-top: 70px; padding-bottom: 55px; }
 .hero.container h1 { font-size: clamp(42px, 5vw, 72px); line-height: 1.05; }
 .markets-page { padding-top: 35px; padding-bottom: 35px; }
 .markets-page h1 { font-size: clamp(28px, 4vw, 42px); margin: 18px 0; }
@@ -749,6 +750,7 @@
 @media (max-width: 850px) {
   .hero.container { grid-template-columns: minmax(0, 1fr); padding-top: 40px; }
   .hero-comparison-image { align-self: auto; }
+  .hero-comparison-image img { aspect-ratio: 1037 / 565; }
   .market-detail-chart { height: 480px; }
 }
 .market-watch-single { display: flex; align-items: center; flex-wrap: nowrap; gap: 12px; padding-top: 0; padding-bottom: 0; min-height: 46px; }
@@ -756,6 +758,11 @@
 .market-watch-single .market-watch-widget { flex: 1; min-width: 0; height: 46px; pointer-events: auto; }
 .market-watch-single .tradingview-widget-container,
 .market-watch-single .market-watch-widget iframe { height: 46px !important; width: 100%; }
+.success-dialog { color: #edf7ff; background: #091824; border: 1px solid #ffffff88; border-radius: 16px; padding: 28px; max-width: min(440px, 90vw); margin: auto; }
+.success-dialog::backdrop { background: #000a; }
+.success-dialog p { margin: 16px 0 24px; }
+.phonerow .phonenumber { min-width: 0; }
+.card button:disabled { opacity: .6; cursor: wait; }
 .journal-title-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .journal-play { white-space: nowrap; font-size: 14px; }
 .journal-play-pending { display: flex; flex-direction: column; align-items: center; gap: 7px; }

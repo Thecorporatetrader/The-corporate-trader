@@ -11,9 +11,14 @@ create table if not exists public.community_comments (
 
 alter table public.community_comments enable row level security;
 
+drop policy if exists "Anyone can read community comments" on public.community_comments;
 create policy "Anyone can read community comments"
   on public.community_comments for select using (true);
-create policy "Anyone can post community comments"
-  on public.community_comments for insert with check (true);
+-- Posting stays disabled until account-security.sql is applied.
+drop policy if exists "Anyone can post community comments" on public.community_comments;
 
-alter publication supabase_realtime add table public.community_comments;
+do $$ begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'community_comments') then
+    alter publication supabase_realtime add table public.community_comments;
+  end if;
+end $$;

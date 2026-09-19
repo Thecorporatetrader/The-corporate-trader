@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Loader2, MessageCircle, Send, Star } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useSession } from '@/lib/useSession';
 
 type Comment = {
   id: string;
@@ -35,8 +36,24 @@ function Stars({ rating, interactive, onChange }: { rating: number; interactive?
 }
 
 export default function CommunitySection() {
+  const { user, loading } = useSession();
+  const [eligible, setEligible] = useState(false);
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    const client = supabase;
+    let active = true;
+    setEligible(false);
+    if (!client || !user) { setChecking(false); return; }
+    setChecking(true);
+    const check = async () => {
+      const { data, error } = await client.rpc('can_post_community');
+      if (active) { setEligible(!error && data === true); setChecking(false); }
+    };
+    check();
+    const timer = window.setInterval(check, 60000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [user]);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [rating, setRating] = useState(5);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -66,11 +83,12 @@ export default function CommunitySection() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim() || !message.trim() || sending) return;
+    if (!message.trim() || sending) return;
+    if (!user || !eligible) { setError('You are not an algo subscriber. Only verified algorithm users can add comments and reviews.'); return; }
     if (!supabase) { setError('Add your Supabase public keys to enable live posting.'); return; }
     setSending(true); setError('');
-    const { data, error } = await supabase.from('community_comments').insert({ author_name: name.trim(), body: message.trim(), rating: replyTo ? null : rating, parent_id: replyTo }).select().single();
-    if (error) setError('Your post could not be sent. Please try again.');
+    const { data, error } = await supabase.from('community_comments').insert({ user_id: user.id, author_name: 'Verified member', body: message.trim(), rating: replyTo ? null : rating, parent_id: replyTo }).select().single();
+    if (error) setError('Unable to post. Check your verified subscription and wait 30 seconds between posts.');
     else { setComments((current) => current.some((comment) => comment.id === data.id) ? current : [data as Comment, ...current]); setMessage(''); setReplyTo(null); }
     setSending(false);
   }
@@ -94,11 +112,12 @@ export default function CommunitySection() {
       </div>
       <aside className="community-form card">
         <div className="community-form-heading"><span className="live-dot" />LIVE COMMUNITY</div><h3>{replyTo ? 'Write a reply' : 'Rate your experience'}</h3><p>{replyTo ? 'Keep the discussion useful and respectful.' : 'Your feedback helps shape what we build next.'}</p>
-        <form onSubmit={submit}><label htmlFor="community-name">Your name</label><input id="community-name" className="input" value={name} onChange={(event) => setName(event.target.value)} maxLength={50} placeholder="e.g. Alex Morgan" required />
+        {loading || checking ? <p role="status">Checking posting access…</p> : !eligible ? <p role="status">You are not an algo subscriber. Only verified algorithm users can add comments and reviews.</p> : <form onSubmit={submit}>
+          <p className="footnote">Posts use your registered name.</p>
           {!replyTo && <><label>Your rating</label><Stars rating={rating} interactive onChange={setRating} /></>}
           <label htmlFor="community-message">{replyTo ? 'Your reply' : 'Your review'}</label><textarea id="community-message" className="input community-textarea" value={message} onChange={(event) => setMessage(event.target.value)} maxLength={600} placeholder={replyTo ? 'Add to the conversation…' : 'What has your experience been like?'} required />
           {error && <p className="community-error" role="alert">{error}</p>}<div className="community-form-actions">{replyTo && <button type="button" className="reply-button" onClick={() => setReplyTo(null)}>Cancel</button>}<button className="btn primary" type="submit" disabled={sending}>{sending ? <Loader2 className="spin" size={17} /> : <Send size={17} />}{sending ? 'Sending' : 'Post to community'}</button></div>
-        </form>
+        </form>}
       </aside>
     </div>
   </section>;

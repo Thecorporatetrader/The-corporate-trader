@@ -35,7 +35,7 @@ export default function Home() {
         <div className="hero-comparison-image">
           <Image src="/images/disciplined-vs-reactive.png" width={1037} height={565}
             alt="Disciplined System: Rules, Risk, Review. Reactive Trading: Chase, Doubt, Reset."
-            priority unoptimized sizes="(max-width: 850px) 92vw, 390px" />
+            priority unoptimized sizes="(max-width: 850px) 92vw, 56vw" />
         </div>
       </header>
 

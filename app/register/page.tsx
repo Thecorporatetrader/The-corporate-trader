@@ -1,39 +1,7 @@
-import Link from 'next/link';
 import { PageHero } from '@/components/Site';
-import { PhoneField } from '@/components/PhoneField';
-
+import { AccountForm } from '@/components/AccountForm';
 export default function Page() {
-  return (
-    <main>
-      <PageHero kicker="ACCOUNT" title="Create your TCT account">
-        Your website account is for TCT services such as algo verification and licensing. Android
-        journal trades are not stored here.
-      </PageHero>
-      <section className="container">
-        <div className="twocol">
-          <div className="card">
-            <h2>Create account</h2>
-            <label className="fieldlabel">Full name</label>
-            <input className="input" placeholder="Full name" />
-            <label className="fieldlabel">Email</label>
-            <input className="input" placeholder="Email" />
-            <PhoneField label="Mobile number" />
-            <label className="fieldlabel">Password</label>
-            <input className="input" type="password" placeholder="Password" />
-            <Link className="btn primary" href="/dashboard">
-              Create account
-            </Link>
-          </div>
-          <div className="card">
-            <div className="eyebrow">TCT PRINCIPLE</div>
-            <h2>Process over promises.</h2>
-            <p>
-              Clear tools, transparent access rules and risk-aware education. TCT does not
-              present trading results as guaranteed outcomes.
-            </p>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
+  return <main><PageHero kicker="ACCOUNT" title="Create your TCT account">Verify your email to access TCT services. Your private Android trading journal remains on your device.</PageHero>
+    <section className="container"><div className="twocol"><AccountForm register /><div className="card"><div className="eyebrow">TCT PRINCIPLE</div><h2>Process over promises.</h2><p>Creating an account does not activate a premium subscription. Algo access is verified separately by our team.</p></div></div></section></main>;
 }
+

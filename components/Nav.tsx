@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
+import { useSession } from '@/lib/useSession';
+import { supabase } from '@/lib/supabase';
 
 /** Site links stay in the navigation row; account actions sit beside the brand. */
 export const navItems = [
@@ -20,6 +22,7 @@ export const navItems = [
 export const helpItem = { label: 'Help', href: '/help' };
 
 export function Nav() {
+  const { user, loading } = useSession();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
@@ -63,8 +66,11 @@ export function Nav() {
             <p className="brandtagline">Trade. Track. Improve. Automate.</p>
           </div>
           <div className="account-actions" aria-label="Account">
+            {!loading && !user && <>
             <Link className="btn ghost" href="/login" onClick={() => setOpen(false)}>Log In</Link>
             <Link className="btn primary" href="/register" onClick={() => setOpen(false)}>Create Account</Link>
+            </>}
+            {user && <><Link className="btn ghost" href="/dashboard">My account</Link><button className="btn ghost" onClick={async () => { await supabase?.auth.signOut(); }}>Sign out</button></>}
           </div>
         </div>
 
