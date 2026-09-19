@@ -19,9 +19,10 @@ interface ModuleCardProps {
   module: Module;
   completedLessonIds: string[];
   onLessonSelect: (lesson: Lesson) => void;
+  onToggleComplete: (lessonId: string) => void;
 }
 
-export function ModuleCard({ module, completedLessonIds, onLessonSelect }: ModuleCardProps) {
+export function ModuleCard({ module, completedLessonIds, onLessonSelect, onToggleComplete }: ModuleCardProps) {
   const total = module.lessons.length;
   const completed = module.lessons.filter((l) => completedLessonIds.includes(l.id)).length;
   const pct = total ? Math.round((completed / total) * 100) : 0;
@@ -64,23 +65,30 @@ export function ModuleCard({ module, completedLessonIds, onLessonSelect }: Modul
         {module.lessons.map((lesson, idx) => {
           const isDone = completedLessonIds.includes(lesson.id);
           return (
-            <button
+            <div
               key={lesson.id}
-              onClick={() => onLessonSelect(lesson)}
-              className="group flex items-start gap-3 rounded-lg border border-transparent bg-panel2 p-4 text-left transition-all hover:border-cyan/40 hover:bg-panel2/70"
+              className="group flex items-start gap-3 rounded-lg border border-transparent bg-panel2 p-4 transition-all hover:border-cyan/40 hover:bg-panel2/70"
             >
-              <div className={`mt-0.5 flex-shrink-0 ${isDone ? 'text-green' : 'text-muted group-hover:text-cyan'}`}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleComplete(lesson.id);
+                }}
+                aria-label={isDone ? 'Mark lesson incomplete' : 'Mark lesson complete'}
+                aria-pressed={isDone}
+                className={`mt-0.5 flex-shrink-0 transition-colors ${isDone ? 'text-green' : 'text-muted hover:text-cyan'}`}
+              >
                 {isDone ? <CheckCircle2 className="h-5 w-5" /> : <LessonIcon type={lesson.type} />}
-              </div>
-              <div className="min-w-0">
-                <h4 className={`text-sm font-semibold leading-snug ${isDone ? 'text-muted' : 'text-text'}`}>
+              </button>
+              <button onClick={() => onLessonSelect(lesson)} className="min-w-0 flex-1 text-left">
+                <h4 className={`text-sm font-semibold leading-snug ${isDone ? 'text-muted' : 'text-text group-hover:text-cyan'}`}>
                   {idx + 1}. {lesson.title}
                 </h4>
                 <p className="mt-1 text-[11px] uppercase tracking-wide text-muted">
                   {lesson.type} · {lesson.duration}
                 </p>
-              </div>
-            </button>
+              </button>
+            </div>
           );
         })}
       </div>

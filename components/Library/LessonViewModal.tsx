@@ -2,6 +2,7 @@
 
 import { X, ChevronRight, BarChart2, FileText, Calculator, Info, Image as ImageIcon, Table2 } from 'lucide-react';
 import type { Lesson, ContentBlock } from '@/lib/curriculum';
+import { VisualChartDiagram } from './VisualChartDiagram';
 
 interface LessonViewModalProps {
   lesson: Lesson | null;
@@ -88,6 +89,9 @@ function renderBlock(block: ContentBlock, index: number) {
           </div>
         </div>
       );
+
+    case 'diagram':
+      return <VisualChartDiagram key={index} pattern={block.pattern} caption={block.caption} />;
 
     case 'chart-placeholder':
       return (

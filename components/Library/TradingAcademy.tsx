@@ -28,6 +28,10 @@ export function TradingAcademy() {
     setCompletedLessons((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
+  const toggleLessonComplete = (id: string) => {
+    setCompletedLessons((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
   return (
     <div className="bg-bg text-text">
       <div className="container">
@@ -125,6 +129,7 @@ export function TradingAcademy() {
                 module={module}
                 completedLessonIds={completedLessons}
                 onLessonSelect={(lesson) => setActiveLesson(lesson)}
+                onToggleComplete={toggleLessonComplete}
               />
             ))}
           </main>
