@@ -15,7 +15,7 @@ export const navItems = [
   { label: 'TCT Strategies & Indicators', href: '/strategies' },
   { label: 'Famous Strategies', href: '/#famous-strategies' },
   { label: 'Library', href: '/library' },
-  { label: 'Post', href: '/post' },
+  { label: 'Market Watch', href: '/post' },
   { label: 'Articles', href: '/articles' },
 ] as const;
 
@@ -42,9 +42,11 @@ export function Nav() {
   // Allow Esc to dismiss the drawer.
   useEffect(() => {
     if (!open) return;
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
@@ -60,17 +62,53 @@ export function Nav() {
       <div className="container navin">
         <div className="navtop">
           <div className="brandblock">
-            <Link className="brand" href="/" aria-label="The Corporate Trader — home">
+            <Link
+              className="brand"
+              href="/"
+              aria-label="The Corporate Trader — home"
+            >
               THE CORPORATE <span>TRADER</span>
             </Link>
-            <p className="brandtagline">Trade. Track. Improve. Automate.</p>
+            <p className="brandtagline">
+              Trade. Track. Improve. Automate.
+            </p>
           </div>
+
           <div className="account-actions" aria-label="Account">
-            {!loading && !user && <>
-            <Link className="btn ghost" href="/login" onClick={() => setOpen(false)}>Log In</Link>
-            <Link className="btn primary" href="/register" onClick={() => setOpen(false)}>Create Account</Link>
-            </>}
-            {user && <><Link className="btn ghost" href="/dashboard">My account</Link><button className="btn ghost" onClick={async () => { await supabase?.auth.signOut(); }}>Sign out</button></>}
+            {!loading && !user && (
+              <>
+                <Link
+                  className="btn ghost"
+                  href="/login"
+                  onClick={() => setOpen(false)}
+                >
+                  Log In
+                </Link>
+                <Link
+                  className="btn primary"
+                  href="/register"
+                  onClick={() => setOpen(false)}
+                >
+                  Create Account
+                </Link>
+              </>
+            )}
+
+            {user && (
+              <>
+                <Link className="btn ghost" href="/dashboard">
+                  My account
+                </Link>
+                <button
+                  className="btn ghost"
+                  onClick={async () => {
+                    await supabase?.auth.signOut();
+                  }}
+                >
+                  Sign out
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -80,14 +118,18 @@ export function Nav() {
             <Link
               key={item.label}
               href={item.href}
-              className={isActive(item.href) ? 'navlink active' : 'navlink'}
+              className={
+                isActive(item.href) ? 'navlink active' : 'navlink'
+              }
             >
               {item.label}
             </Link>
           ))}
           <Link
             href={helpItem.href}
-            className={isActive(helpItem.href) ? 'navlink active' : 'navlink'}
+            className={
+              isActive(helpItem.href) ? 'navlink active' : 'navlink'
+            }
           >
             {helpItem.label}
           </Link>
@@ -106,7 +148,7 @@ export function Nav() {
         </button>
       </div>
 
-      {/* Mobile drawer — site navigation; account actions remain above */}
+      {/* Mobile drawer — account actions remain above */}
       <div
         id="mobile-menu"
         className={open ? 'mobilemenu open' : 'mobilemenu'}
@@ -117,7 +159,11 @@ export function Nav() {
             <Link
               key={item.label}
               href={item.href}
-              className={isActive(item.href) ? 'mobilelink active' : 'mobilelink'}
+              className={
+                isActive(item.href)
+                  ? 'mobilelink active'
+                  : 'mobilelink'
+              }
               onClick={() => setOpen(false)}
             >
               {item.label}
@@ -125,7 +171,11 @@ export function Nav() {
           ))}
           <Link
             href={helpItem.href}
-            className={isActive(helpItem.href) ? 'mobilelink active' : 'mobilelink'}
+            className={
+              isActive(helpItem.href)
+                ? 'mobilelink active'
+                : 'mobilelink'
+            }
             onClick={() => setOpen(false)}
           >
             {helpItem.label}
