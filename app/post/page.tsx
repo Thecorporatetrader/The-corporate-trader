@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import MarketTicker from '@/components/MarketTicker';
 
 /**
  * Replace app/post/page.tsx only. No extra packages, database migrations or keys.
@@ -179,7 +180,9 @@ export default async function MarketWatchPage() {
   const available = readings.filter(r => r.points.length > 0).length;
   const checked = readings.find(r => r.checked)?.checked;
   const overview = ['A191RL1Q225SBEA', 'CPIAUCSL', 'UNRATE', 'PAYEMS'].map(id => readings.find(r => r.metric.id === id)!);
-  return <main className="tct-mw">
+  return <>
+    <MarketTicker />
+    <main className="tct-mw">
     <style>{styles}</style>
     <div className="mw-shell">
       <header className="mw-hero">
@@ -240,7 +243,8 @@ export default async function MarketWatchPage() {
         </details>
       </aside>
     </div>
-  </main>;
+    </main>
+  </>;
 }
 
 const styles = `
@@ -249,4 +253,3 @@ const styles = `
 @media(max-width:950px){.tct-mw .mw-hero{flex-direction:column;align-items:stretch;padding-top:32px}.mw-status{min-width:0}.mw-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.mw-shell{width:92%}.mw-grid{grid-template-columns:minmax(0,1fr)}.mw-card{padding:18px}.mw-heading{align-items:flex-start;flex-direction:column}.mw-overview{gap:10px}.mw-stat{padding:14px}.mw-stat strong{font-size:26px}.mw-stat>span{font-size:12px}.mw-calendar{padding:10px}.mw-calendar summary span{display:block;margin:6px 0 0}.mw-lead{font-size:15px}.tct-mw .mw-section{padding-top:28px}.mw-method{padding:18px}}
 `;
-
