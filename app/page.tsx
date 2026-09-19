@@ -108,13 +108,14 @@ export default function Home() {
         </div>
         <div className="grid">
           {famousStrategies.map((s) => (
-            <article className="card strategycard" key={s.name}>
+            <Link className="card strategycard" href={`/famous-strategies/${s.slug}`} key={s.slug}>
               <span className="pill">{s.era}</span>
               <h3>{s.name}</h3>
               <div className="strategytrader">{s.trader}</div>
               <p>{s.summary}</p>
               <div className="strategyprinciple">{s.principle}</div>
-            </article>
+              <span className="good strategycta">Read the full guide →</span>
+            </Link>
           ))}
         </div>
         <div className="notice" style={{ marginTop: 22 }}>

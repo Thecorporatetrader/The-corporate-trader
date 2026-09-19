@@ -90,3 +90,54 @@ Local dependency installation was blocked by network permissions in this environ
 A production build and live email/database end-to-end tests must run after setup; this ZIP is not
 a claim that those external services have already been configured or tested.
 
+
+## 7. Google sign-in ("Continue with Google")
+Login and Register pages show a Continue with Google button. It uses Supabase's Google provider;
+no new environment variables are needed on Vercel.
+
+1. Re-run the database migration (required on existing projects).
+   Re-run supabase/account-security.sql in SQL Editor (safe to run again). It makes country_code and
+   mobile_number nullable, replaces the signup trigger so Google names cannot break account creation,
+   and creates the profile_mobile_missing() and complete_mobile_profile() functions that /auth/callback,
+   /complete-profile and /dashboard call. Until it is re-run, Google sign-in will land on a broken
+   profile step. The earlier note that the signup trigger expects name/country/mobile metadata now
+   applies to email signups only; an account without a mobile number is sent to /complete-profile.
+2. Create Google OAuth credentials (Google Cloud Console, https://console.cloud.google.com/).
+   - APIs & Services > OAuth consent screen: set the app name, support email and developer contact.
+     Scopes needed: openid, email, profile (the defaults). Publish the app to production, otherwise
+     only listed test users can sign in.
+   - APIs & Services > Credentials > Create credentials > OAuth client ID > Web application.
+   - Authorized JavaScript origins: https://YOUR-DOMAIN (add your Vercel test domain if used).
+   - Authorized redirect URIs: the callback URL Supabase shows on its Google provider page,
+     https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback (this is Supabase's URL, not your site's).
+   - Copy the Client ID and Client Secret. Keep the secret out of GitHub and out of chat.
+3. Enable the provider in Supabase.
+   Authentication > Providers > Google: turn it on, paste the Client ID and Client Secret, save.
+   Guide: https://supabase.com/docs/guides/auth/social-login/auth-google
+4. Allow the new redirect in Supabase.
+   Authentication > URL Configuration > Redirect URLs: add https://YOUR-DOMAIN/auth/callback
+   alongside the existing https://YOUR-DOMAIN/login and https://YOUR-DOMAIN/reset-password entries
+   (and the equivalent Vercel test URL). Keep Site URL as https://YOUR-DOMAIN. If the redirect is not
+   allowed, Google sign-in returns to the Site URL instead of /auth/callback and no session is created.
+
+How it behaves:
+- A Google user's email is already verified by Google, so no verification email is sent.
+- Google does not supply a mobile number. First-time users are sent to /complete-profile to add one.
+  It can be saved once only; the database refuses to overwrite an existing number.
+- Google sign-in NEVER grants premium access. Nothing inserts into algo_subscriptions automatically;
+  premium stays manual admin entitlement as described in section 4.
+- Google users have no password. They can set one with Forgot password (a reset link goes to their
+  Google email) if they want to sign in with email or mobile plus password.
+- Supabase normally links a Google sign-in to an existing account that has the same verified email
+  instead of creating a second account. Check the linking behaviour under Authentication settings.
+
+Acceptance check for Google sign-in:
+1. Use a Google account that has never signed in to TCT and click Continue with Google.
+2. Approve the Google prompt; you land on /auth/callback, then automatically on /complete-profile.
+3. Enter a country code and a valid 8-15 digit mobile number, and submit.
+4. You land on /dashboard showing the account email as verified and the standard, non-premium message
+   ("You are not an algo subscriber...").
+5. Sign out and sign in with Google again: you go straight to /dashboard and are not asked for a mobile.
+6. Open /dashboard directly in a fresh profile for a Google account with no saved mobile: you are sent to
+   /complete-profile. Confirm the account has no row in algo_subscriptions.
+7. Submitting the same mobile number for a second account is refused (phone numbers are unique).

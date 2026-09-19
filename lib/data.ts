@@ -90,6 +90,8 @@ export const moreArticles: ArticleSummary[] = [
 ];
 
 export interface FamousStrategy {
+  /** URL slug for /famous-strategies/[slug]; keys lib/famousStrategiesDetail.ts. */
+  slug: string;
   name: string;
   trader: string;
   era: string;
@@ -104,6 +106,7 @@ export interface FamousStrategy {
  */
 export const famousStrategies: FamousStrategy[] = [
   {
+    slug: 'turtle-trading',
     name: 'Turtle Trading',
     trader: 'Richard Dennis & William Eckhardt',
     era: '1980s',
@@ -112,6 +115,7 @@ export const famousStrategies: FamousStrategy[] = [
     principle: 'Mechanical rules over discretion',
   },
   {
+    slug: 'pivotal-points',
     name: 'Pivotal Points',
     trader: 'Jesse Livermore',
     era: '1900s–1930s',
@@ -120,6 +124,7 @@ export const famousStrategies: FamousStrategy[] = [
     principle: 'Let the market confirm first',
   },
   {
+    slug: 'darvas-box-theory',
     name: 'Box Theory',
     trader: 'Nicolas Darvas',
     era: '1950s',
@@ -128,6 +133,7 @@ export const famousStrategies: FamousStrategy[] = [
     principle: 'Defined risk at every entry',
   },
   {
+    slug: 'can-slim',
     name: 'CAN SLIM',
     trader: "William J. O'Neil",
     era: '1980s',
@@ -136,6 +142,7 @@ export const famousStrategies: FamousStrategy[] = [
     principle: 'Screen before you trade',
   },
   {
+    slug: 'systematic-trend-following',
     name: 'Systematic Trend Following',
     trader: 'Ed Seykota',
     era: '1970s onward',
@@ -144,6 +151,7 @@ export const famousStrategies: FamousStrategy[] = [
     principle: 'Cut losses, ride trends',
   },
   {
+    slug: 'risk-first-macro',
     name: 'Risk-First Macro',
     trader: 'Paul Tudor Jones',
     era: '1980s onward',

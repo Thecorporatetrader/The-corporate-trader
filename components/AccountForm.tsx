@@ -4,11 +4,31 @@ import { FormEvent, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { identityError, validEmail, validPassword, passwordHelp } from '@/lib/validation';
 import { IdentityFields } from './IdentityFields';
-export function AccountForm({ register = false }: { register?: boolean }) {
+import { GoogleIcon } from './GoogleIcon';
+export function AccountForm({ register = false, initialNotice = '' }: { register?: boolean; initialNotice?: string }) {
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [notice, setNotice] = useState(initialNotice);
   const [error, setError] = useState('');
   const [recover, setRecover] = useState(false);
+  async function continueWithGoogle() {
+    setError(''); setNotice('');
+    const client = supabase;
+    if (!client) { setError('Account services are not configured yet. Please contact TCT.'); return; }
+    if (busy || googleBusy) return;
+    setGoogleBusy(true);
+    try {
+      const { error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin + '/auth/callback' },
+      });
+      // On success the browser navigates to Google; nothing further runs here.
+      if (error) throw new Error('Unable to continue with Google right now. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Connection failed. Please try again.');
+      setGoogleBusy(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -37,7 +57,8 @@ export function AccountForm({ register = false }: { register?: boolean }) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Unable to continue. Please try again.');
         if (register) {
-          setNotice('Check your email and click the verification link before signing in.');
+          window.location.assign('/login?registered=1');
+          return;
         } else {
           const { error } = await client.auth.setSession(result.session);
           if (error) throw new Error('Unable to start your session. Please sign in again.');
@@ -49,6 +70,13 @@ export function AccountForm({ register = false }: { register?: boolean }) {
   }
   return <form onSubmit={submit} className="card">
     <h2>{register ? 'Create account' : recover ? 'Reset your password' : 'Sign in'}</h2>
+    {!recover && <>
+      <button type="button" className="btn ghost google-btn" disabled={busy || googleBusy} onClick={continueWithGoogle}>
+        <GoogleIcon /> {googleBusy ? 'Redirecting…' : register ? 'Sign up with Google' : 'Continue with Google'}
+      </button>
+      <p className="footnote">Google sign-in does not grant premium algo access on its own.</p>
+      <div className="formdivider" role="separator" aria-label="or"><span>or use email</span></div>
+    </>}
     {register ? <IdentityFields /> : <>
       <label className="fieldlabel" htmlFor="identifier">{recover ? 'Registered email' : 'Email or mobile number'}</label>
       <input id="identifier" name="identifier" className="input" type={recover ? 'email' : 'text'} autoComplete="username"
