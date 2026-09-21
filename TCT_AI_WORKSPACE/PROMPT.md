@@ -174,6 +174,7 @@ Supabase callback URL
 working authentication configuration
 working Google login code
 
+
 unless the owner specifically requests it.
 
 ## Current Products
