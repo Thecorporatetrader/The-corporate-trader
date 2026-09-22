@@ -18,13 +18,13 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    // Add your Google OAuth logic here (e.g., supabase.auth.signInWithOAuth)
+    // Add your Google OAuth logic here
     console.log('Logging in with Google');
   };
 
   return (
-    <div className="relative z-10 flex min-h-screen items-center justify-center bg-gray-950 px-4">
-      <div className="w-full max-w-md space-y-8 rounded-2xl bg-gray-900 p-8 shadow-xl border border-gray-800">
+    <div className="relative z-10 flex min-h-screen items-center justify-center bg-gray-950 px-4 pt-24 pb-12">
+      <div className="relative z-30 w-full max-w-md space-y-8 rounded-2xl bg-gray-900 p-8 shadow-xl border border-gray-800 pointer-events-auto">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight text-white">Welcome Back</h2>
           <p className="mt-2 text-sm text-gray-400">Sign in to your account to continue</p>
@@ -34,7 +34,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleGoogleLogin}
-          className="relative z-20 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-700 hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer pointer-events-auto"
+          className="relative z-40 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-700 hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer pointer-events-auto"
         >
           <GoogleIcon />
           Continue with Google
@@ -75,7 +75,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="relative z-20 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer pointer-events-auto disabled:opacity-50"
+            className="relative z-40 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer pointer-events-auto disabled:opacity-50"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
@@ -83,7 +83,7 @@ export default function LoginPage() {
 
         <p className="text-center text-sm text-gray-400">
           Don't have an account?{' '}
-          <Link href="/register" className="font-medium text-blue-400 hover:underline">
+          <Link href="/register" className="font-medium text-blue-400 hover:underline pointer-events-auto">
             Register
           </Link>
         </p>
