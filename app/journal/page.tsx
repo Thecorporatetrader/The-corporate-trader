@@ -56,7 +56,7 @@ export default function JournalPage() {
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">📊</div>
             <h3 className="text-lg font-semibold">Granular Execution Metrics</h3>
             <p className="text-sm text-gray-600">
-              Instantly monitor your <strong className="text-gray-900">Net Result</strong>, <strong className="text-gray-900">Win Rate</strong>, <strong className="text-gray-900">Profit Factor</strong>, <strong className="text-gray-900">Expectancy per Trade</strong>, and <strong className="text-gray-900">Max Drawdown</strong> across all logged operations[cite: 76].
+              Instantly monitor your Net Result, Win Rate, Profit Factor, Expectancy per Trade, and Max Drawdown across all logged operations.
             </p>
           </div>
 
@@ -65,7 +65,7 @@ export default function JournalPage() {
             <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg">⏰</div>
             <h3 className="text-lg font-semibold">Session & Day Performance</h3>
             <p className="text-sm text-gray-600">
-              Pinpoint exactly when you perform best. Analyze profitability across the <strong className="text-gray-900">London / New York Overlap</strong>, standard market sessions, and specific weekdays (e.g., Wednesday best days)[cite: 75].
+              Pinpoint exactly when you perform best by analyzing profitability across the London / New York Overlap, standard market sessions, and specific weekdays.
             </p>
           </div>
 
@@ -74,7 +74,7 @@ export default function JournalPage() {
             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-bold text-lg">🏷️</div>
             <h3 className="text-lg font-semibold">Tag & Setup Breakdowns</h3>
             <p className="text-sm text-gray-600">
-              Evaluate setups like <strong className="text-gray-900">#News</strong>, <strong className="text-gray-900">#Breakout</strong>, and <strong className="text-gray-900">#Reversal</strong> to see which strategies generate your highest cumulative returns[cite: 77].
+              Evaluate specific trade categories like #News, #Breakout, and #Reversal to see which strategies generate your highest cumulative returns.
             </p>
           </div>
 
@@ -95,7 +95,7 @@ export default function JournalPage() {
               💡 Automated Trading Insights
             </h4>
             <p className="text-sm text-gray-600">
-              Receive smart summaries highlighting your strongest session performance, winning instruments, and average loss profiles automatically generated after every batch of logs[cite: 74].
+              Receive smart summaries highlighting your strongest session performance, winning instruments, and average loss profiles automatically generated after every batch of logs.
             </p>
           </div>
 
@@ -104,7 +104,7 @@ export default function JournalPage() {
               ⭐ Performance Rating Matrix
             </h4>
             <p className="text-sm text-gray-600">
-              Score your <strong className="text-gray-900">Risk-to-Reward (R/R)</strong>, <strong className="text-gray-900">Risk Exposure</strong>, and <strong className="text-gray-900">Execution Discipline</strong> with structured ratings to maintain strict risk parameters[cite: 74].
+              Score your Risk-to-Reward (R/R), Risk Exposure, and Execution Discipline with structured star ratings to maintain strict risk parameters.
             </p>
           </div>
         </div>
