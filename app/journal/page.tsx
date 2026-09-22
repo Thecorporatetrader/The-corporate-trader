@@ -1,143 +1,115 @@
-import { googlePlayUrl } from '@/lib/journal';
+// The-corporate-trader-main/app/journal/page.tsx
+'use client';
 
-export default function Page() {
+import React from 'react';
+
+export default function JournalPage() {
   return (
-    <main>
-      <header className="pagehero container">
-        <div className="eyebrow">ANDROID APP</div>
-        <div className="journal-title-row">
-          <h1>TCT Trading Journal</h1>
-          {googlePlayUrl ? (
-            <a className="btn primary journal-play" href={googlePlayUrl} target="_blank" rel="noopener noreferrer">
-              Get it on Google Play
-            </a>
-          ) : (
-            <div className="journal-play-pending">
-              <button className="btn primary journal-play" type="button" disabled aria-describedby="journal-play-status">
-                Get it on Google Play
-              </button>
-              <span id="journal-play-status">Coming soon</span>
-            </div>
-          )}
-        </div>
-        <p>
-          Most journals just store numbers. TCT lets AI do the reviewing—giving you a clear
-          overview of all your trades, highlighting patterns, and helping you understand where
-          to improve.
+    <div className="p-6 md:p-12 max-w-6xl mx-auto space-y-16 text-gray-900">
+      
+      {/* Header Section */}
+      <div className="text-center space-y-4">
+        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+          Mobile Trading Intelligence
+        </span>
+        <h1 className="text-4xl font-extrabold tracking-tight">Inside The Corporate Trader App</h1>
+        <p className="text-gray-600 max-w-2xl mx-auto text-lg">
+          Transform your raw data into professional-grade analytics. Designed specifically for Android, our mobile app gives you complete visibility over your edge, risk metrics, and session performance.
         </p>
-      </header>
+      </div>
 
-      {/* HOW IT WORKS */}
-      <section className="container">
-        <div className="sectionhead">
-          <div>
-            <div className="eyebrow">HOW IT WORKS</div>
-            <h2>Three steps, every trade.</h2>
+      {/* Google Play Store Banner */}
+      <div className="bg-gradient-to-r from-gray-900 via-indigo-950 to-blue-950 text-white p-8 md:p-12 rounded-3xl shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8 border border-blue-900/50">
+        <div className="space-y-3 text-center md:text-left">
+          <div className="inline-block bg-blue-600 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
+            Android App Release
           </div>
-        </div>
-        <div className="grid">
-          <div className="card">
-            <span className="pill">STEP 1</span>
-            <h3>Log the plan</h3>
-            <p>
-              Asset, side, entry price, lot size, and your planned stop loss and TP1/TP2/TP3 —
-              before the trade plays out.
-            </p>
-          </div>
-          <div className="card">
-            <span className="pill">STEP 2</span>
-            <h3>Log the outcome</h3>
-            <p>
-              Actual stop loss and take-profit hit, exit price, and the resulting profit or loss
-              — after the trade closes.
-            </p>
-          </div>
-          <div className="card">
-            <span className="pill">STEP 3</span>
-            <h3>TCT rates it</h3>
-            <p>
-              The app compares what you planned against what actually happened and assigns a
-              single overall rating — no manual scoring required.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* WHY A RATING BEATS RAW NUMBERS */}
-      <section className="container">
-        <div className="sectionhead">
-          <div>
-            <div className="eyebrow">WHY THIS BEATS A NORMAL JOURNAL</div>
-            <h2>At 20 trades, a spreadsheet works. At 1,000, it doesn&apos;t.</h2>
-          </div>
-          <p>
-            A normal journal gives you rows of numbers. Reading back through 20 of them to find a
-            pattern is manageable. Reading back through 1,000 to find where your discipline
-            actually breaks down is not — so most traders never do it, and the same mistakes
-            repeat unnoticed.
+          <h2 className="text-3xl font-bold">Get Ready to Trade Smarter on Mobile</h2>
+          <p className="text-blue-200 text-sm md:text-base max-w-lg">
+            Track executions, inspect cumulative performance trajectories, and review your trading psychology directly from your pocket.
           </p>
         </div>
-        <div className="twocol">
-          <div className="card">
-            <h2>One rating, any sample size</h2>
-            <p>
-              TCT turns every trade into a single comparable score instead of a row you have to
-              re-read. Look at your average rating over any window — this week, this month, this
-              year — and you know immediately whether your execution is holding up or slipping,
-              without opening a single spreadsheet.
-            </p>
-          </div>
-          <div className="card">
-            <div className="eyebrow">THE KEY DIFFERENCE</div>
-            <h2>Two &quot;losses&quot; are not the same trade.</h2>
-            <p>
-              A plain win/loss journal records both as the same red number. TCT&apos;s rating
-              tells them apart — because the gap between them is exactly what improves your
-              trading, not just your P&amp;L.
-            </p>
+        <div className="flex flex-col items-center gap-2">
+          <div className="px-6 py-4 bg-gray-900 text-gray-200 font-medium rounded-2xl border border-gray-700 shadow-xl flex items-center gap-4 hover:border-blue-500 transition cursor-not-allowed">
+            <svg className="w-8 h-8 fill-blue-500" viewBox="0 0 24 24">
+              <path d="M3.609 1.814L13.792 12 3.61 22.186a1.5 1.5 0 0 1-2.454-1.145V2.959a1.5 1.5 0 0 1 2.453-1.145zM15.207 13.414l2.293 2.293-11.5 6.635a1.5 1.5 0 0 0 2.212 1.312l11.085-6.398-4.09-4.842zm0-2.828L19.3 5.744a1.5 1.5 0 0 0-2.213-1.312l-11.085 6.398 4.09 4.842 5.115-5.258z" />
+            </svg>
+            <div className="text-left">
+              <div className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Google Play Store</div>
+              <div className="text-lg font-bold tracking-tight text-white">Coming Soon</div>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* FEATURES + DATA */}
-      <section className="container">
-        <div className="twocol">
-          <div className="card">
-            <h2>Full trade breakdown</h2>
-            <div className="list">
-              <div className="row">
-                <b>Trade Journal</b>
-                <br />
-                Entry, side, lot size, planned and actual SL/TP, strategy tags and notes.
-              </div>
-              <div className="row">
-                <b>Performance &amp; Ratings</b>
-                <br />
-                Win rate, average profit/loss, biggest win/loss, risk/reward and overall rating
-                trend.
-              </div>
-              <div className="row">
-                <b>Data &amp; Backup</b>
-                <br />
-                Export your complete journal before uninstalling or changing phones. Import/restore
-                is planned for the production app.
-              </div>
-            </div>
-            <div className="actions">
-              <span className="btn primary">Google Play · Coming Soon</span>
-            </div>
+      {/* Feature Showcase Grid */}
+      <div className="space-y-12">
+        <div className="border-b pb-4">
+          <h2 className="text-2xl font-bold">Powerful Analytics Engine</h2>
+          <p className="text-gray-600 text-sm">Every core metric you need to evaluate long-term profitability and risk exposure.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          {/* Card 1: Core Metrics */}
+          <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition">
+            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">📊</div>
+            <h3 className="text-lg font-semibold">Granular Execution Metrics</h3>
+            <p className="text-sm text-gray-600">
+              Instantly monitor your <strong className="text-gray-900">Net Result</strong>, <strong className="text-gray-900">Win Rate</strong>, <strong className="text-gray-900">Profit Factor</strong>, <strong className="text-gray-900">Expectancy per Trade</strong>, and <strong className="text-gray-900">Max Drawdown</strong> across all logged operations[cite: 76].
+            </p>
           </div>
-          <div className="card">
-            <div className="eyebrow">TCT PRINCIPLE</div>
-            <h2>Your journal. Your device.</h2>
-            <p>
-              All journal data is stored locally on your Android device — never on TCT servers.
-              TCT does not require cloud storage for journal records, and does not present trading
-              results as guaranteed outcomes.
+
+          {/* Card 2: Session & Day Breakdown */}
+          <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition">
+            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg">⏰</div>
+            <h3 className="text-lg font-semibold">Session & Day Performance</h3>
+            <p className="text-sm text-gray-600">
+              Pinpoint exactly when you perform best. Analyze profitability across the <strong className="text-gray-900">London / New York Overlap</strong>, standard market sessions, and specific weekdays (e.g., Wednesday best days)[cite: 75].
+            </p>
+          </div>
+
+          {/* Card 3: Tag & Strategy Analysis */}
+          <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition">
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-bold text-lg">🏷️</div>
+            <h3 className="text-lg font-semibold">Tag & Setup Breakdowns</h3>
+            <p className="text-sm text-gray-600">
+              Evaluate setups like <strong className="text-gray-900">#News</strong>, <strong className="text-gray-900">#Breakout</strong>, and <strong className="text-gray-900">#Reversal</strong> to see which strategies generate your highest cumulative returns[cite: 77].
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Intelligence & Rating Highlights */}
+      <div className="bg-gray-50 p-8 rounded-3xl border space-y-8">
+        <div>
+          <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Psychology & Insights</span>
+          <h2 className="text-2xl font-bold mt-1">Automated Trading Insights & Ratings</h2>
+          <p className="text-gray-600 text-sm">The app doesn't just store data; it actively coaches your trading discipline.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-3">
+            <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+              💡 Automated Trading Insights
+            </h4>
+            <p className="text-sm text-gray-600">
+              Receive smart summaries highlighting your strongest session performance, winning instruments, and average loss profiles automatically generated after every batch of logs[cite: 74].
+            </p>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-3">
+            <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+              ⭐ Performance Rating Matrix
+            </h4>
+            <p className="text-sm text-gray-600">
+              Score your <strong className="text-gray-900">Risk-to-Reward (R/R)</strong>, <strong className="text-gray-900">Risk Exposure</strong>, and <strong className="text-gray-900">Execution Discipline</strong> with structured ratings to maintain strict risk parameters[cite: 74].
             </p>
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+
+    </div>
   );
 }
