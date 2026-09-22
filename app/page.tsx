@@ -34,7 +34,7 @@ export default function HomePage() {
                 Trading technology built around process — not promises.
               </p>
               <p className="text-sm sm:text-base text-gray-400 leading-relaxed">
-                TCT provides trading tools, automation, analytics and education designed to help traders structure their process from planning and execution to review and improvement.
+                TCT provides trading tools, automation, analytics and educational resources designed to help traders structure their process from planning and execution to review and improvement.
               </p>
             </div>
 
@@ -53,10 +53,10 @@ export default function HomePage() {
                 Explore TCT Products
               </Link>
               <Link 
-                href="/academy" 
+                href="/library" 
                 className="w-full sm:w-auto px-8 py-4 bg-gray-900 hover:bg-gray-800 text-gray-200 border border-gray-800 font-bold rounded-2xl transition text-center text-sm"
               >
-                Start with TCT
+                Start with TCT Library
               </Link>
             </div>
           </div>
@@ -117,7 +117,6 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Desktop horizontal / Mobile vertical flow */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
             {[
               { step: "01", title: "PLAN", desc: "Define setup criteria" },
@@ -256,7 +255,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Product 5: TCT Academy */}
+          {/* Product 5: TCT Library */}
           <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 sm:p-8 flex flex-col justify-between space-y-6 hover:border-gray-700 transition">
             <div className="space-y-4">
               <div className="flex justify-between items-start">
@@ -265,20 +264,20 @@ export default function HomePage() {
                 </span>
                 <span className="text-2xl">📚</span>
               </div>
-              <h3 className="text-xl font-bold text-white">TCT ACADEMY</h3>
-              <p className="text-sm font-medium text-emerald-400">Learn the concepts behind structured trading.</p>
-              <p className="text-xs text-gray-400">Educational content covering trading concepts, market structure, technical analysis, risk management and automation.</p>
+              <h3 className="text-xl font-bold text-white">TCT LIBRARY</h3>
+              <p className="text-sm font-medium text-emerald-400">Explore educational resources and trading documentation.</p>
+              <p className="text-xs text-gray-400">Access curated educational materials, guides, trading documentation, and reference references in the library.</p>
               
               <div className="space-y-2 pt-2 border-t border-gray-800">
-                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Market Structure modules</div>
-                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Supply & Demand frameworks</div>
-                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Risk Management guides</div>
-                <div className="text-xs text-gray-300 flex items-center gap-2">✓ MQL5 & Algo learning</div>
+                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Educational guides & documentation</div>
+                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Structured reference materials</div>
+                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Trading concept explainers</div>
+                <div className="text-xs text-gray-300 flex items-center gap-2">✓ Resource downloads</div>
               </div>
             </div>
 
-            <Link href="/academy" className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-center text-sm transition">
-              Explore Academy
+            <Link href="/library" className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl text-center text-sm transition">
+              Explore Library
             </Link>
           </div>
 
@@ -410,8 +409,8 @@ export default function HomePage() {
               desc: "Automate repeatable execution and strategy rules where technically feasible."
             },
             {
-              title: "Education",
-              desc: "Learn core concepts and structured trading frameworks through TCT Academy."
+              title: "Educational Library",
+              desc: "Explore guides, reference files, and educational materials through the TCT Library."
             },
             {
               title: "Risk Awareness",
@@ -450,7 +449,7 @@ export default function HomePage() {
             <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl space-y-2">
               <span className="text-[10px] font-mono text-blue-400 font-bold uppercase">Phase 1</span>
               <h3 className="font-bold text-white">LEARN</h3>
-              <p className="text-xs text-gray-400">TCT Academy</p>
+              <p className="text-xs text-gray-400">TCT Library</p>
             </div>
             <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl space-y-2">
               <span className="text-[10px] font-mono text-blue-400 font-bold uppercase">Phase 2</span>
@@ -473,34 +472,34 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================================
-          SECTION 7 — ACADEMY PREVIEW
+          SECTION 7 — LIBRARY PREVIEW
           ========================================================================= */}
       <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
         
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-gray-800 pb-8">
           <div className="space-y-3 max-w-2xl">
-            <span className="text-blue-400 text-xs font-bold uppercase tracking-widest">Education</span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-white">LEARN BEFORE YOU AUTOMATE</h2>
+            <span className="text-blue-400 text-xs font-bold uppercase tracking-widest">Library & Resources</span>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-white">EXPLORE THE TCT LIBRARY</h2>
             <p className="text-gray-400 text-sm sm:text-base">
-              TCT Academy provides structured educational content covering trading concepts, analysis, risk management and automation-related learning.
+              Access curated educational documentation, trading guides, concept explainers, and reference resources.
             </p>
           </div>
-          <Link href="/academy" className="px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl border border-gray-800 text-sm transition whitespace-nowrap">
-            Explore TCT Academy
+          <Link href="/library" className="px-6 py-3 bg-gray-900 hover:bg-gray-800 text-white font-bold rounded-xl border border-gray-800 text-sm transition whitespace-nowrap">
+            Open TCT Library
           </Link>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
-            "Market Structure",
-            "Supply & Demand",
-            "Liquidity",
-            "Indicators",
-            "Risk Management",
-            "Algo / MQL5 Learning"
+            "Trading Guides",
+            "Documentation",
+            "Concept Explainers",
+            "Reference Files",
+            "Risk Frameworks",
+            "Automation Specs"
           ].map((cat, idx) => (
             <div key={idx} className="bg-gray-900 border border-gray-800 p-4 rounded-2xl text-center space-y-1">
-              <span className="text-lg">📖</span>
+              <span className="text-lg">📁</span>
               <h3 className="font-bold text-white text-xs sm:text-sm">{cat}</h3>
             </div>
           ))}
@@ -592,8 +591,8 @@ export default function HomePage() {
             <Link href="#products" className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 text-sm transition">
               Explore Products
             </Link>
-            <Link href="/academy" className="w-full sm:w-auto px-8 py-4 bg-gray-900 hover:bg-gray-800 text-gray-200 border border-gray-700 font-bold rounded-2xl text-sm transition">
-              Explore Academy
+            <Link href="/library" className="w-full sm:w-auto px-8 py-4 bg-gray-900 hover:bg-gray-800 text-gray-200 border border-gray-700 font-bold rounded-2xl text-sm transition">
+              Explore Library
             </Link>
           </div>
 
