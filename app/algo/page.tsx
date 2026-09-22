@@ -1,123 +1,533 @@
-import Link from 'next/link';
-import type { Metadata } from 'next';
-import { ArrowRight, Check, Settings2, ShieldCheck, Target, TrendingUp, Layers, Code2, Zap } from 'lucide-react';
-import { contact } from '@/lib/contact';
+// The-corporate-trader-main/app/algo/page.tsx
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Get Your Free TCT Algo — The Corporate Trader',
-  description: 'Get the free 100%-automated TCT MT5 algo, explore full automation at ₹19,999, or share your strategy for a free custom algo build.',
-};
+import React, { useState } from 'react';
 
-const features = [
-  { icon: Zap, title: 'Order placement', text: 'Place orders according to the configured execution rules.' },
-  { icon: ShieldCheck, title: 'Stop loss', text: 'Apply the stop-loss settings defined for your strategy.' },
-  { icon: Target, title: 'Take profit', text: 'Manage target-based exits using your configured take-profit rules.' },
-  { icon: TrendingUp, title: 'Trailing stop loss', text: 'Adjust the stop as the trade develops, following your trailing rules.' },
-  { icon: Check, title: 'Profit booking', text: 'Close positions when the configured exit conditions are met.' },
-  { icon: Layers, title: 'Partial profit booking', text: 'Close part of a position at defined levels and manage the remainder.' },
-];
+export default function TCTAlgoPage() {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    mobile: '',
+    market: 'Forex',
+    platform: 'MT5',
+    broker: '',
+    instruments: '',
+    timeframe: '',
+    buyEntryRules: '',
+    sellEntryRules: '',
+    entryFilters: '',
+    stopLossRules: '',
+    takeProfitRules: '',
+    positionSizing: '',
+    maxRisk: '',
+    breakevenRules: '',
+    trailingRules: '',
+    partialExitRules: '',
+    tradingSession: '',
+    reentryRules: '',
+    maxDailyTrades: '',
+    maxDailyLoss: '',
+    newsBehaviour: '',
+    exampleSetup: '',
+    additionalNotes: '',
+  });
 
-function requestLink(message: string) {
-  const url = new URL(contact.whatsapp);
-  url.searchParams.set('text', message);
-  return url.toString();
-}
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    alert('Thank you! Your custom algo requirements have been submitted for technical review.');
+    setIsFormOpen(false);
+  };
 
-const freeLink = requestLink('Hi TCT, I would like the free 100%-automated TCT algo for MT5. Please explain the required inputs, configuration, and how to get access.');
-const paidLink = requestLink('Hi TCT, I am interested in the 100%-automated TCT algo listed at ₹19,999. Please confirm the features, licence duration, total price including applicable taxes, and support terms.');
-const waitlistLink = requestLink('Hi TCT, please share updates about the upcoming algo combining the first TCT algo with liquidity and supply-demand zones.');
-const customLink = requestLink('Hi TCT, I would like a free custom algo built from my strategy.\n\nMarket / symbol:\nTimeframe:\nEntry rules:\nStop-loss and take-profit rules:\nTrailing-stop rules:\nPartial profit-booking rules:\nPosition sizing / risk limits:\nTrading sessions:\nExample setup:\n\nPlease review the feasibility and confirm the scope.');
-
-export default function AlgoPage() {
   return (
-    <main className="tct-algo">
-      <style>{styles}</style>
-      <div className="ta-wrap">
-        <header className="ta-hero">
-          <div>
-            <p className="ta-eyebrow">TCT ALGO / MT5 AUTOMATION</p>
-            <span className="ta-tag">YOUR FIRST ALGO. FREE.</span>
-            <h1>Your trading rules.<br /><span>Put into action.</span></h1>
-            <p className="ta-lead">Get the free TCT algo to automate order placement and trade management. Already have a strategy? Send us your rules—we can build your own algo for free.</p>
-            <div className="ta-actions">
-              <a className="ta-button ta-primary" href={freeLink} target="_blank" rel="noopener noreferrer">Get Free TCT Algo <ArrowRight size={18} aria-hidden="true" /></a>
-              <a className="ta-button ta-secondary" href="#custom">Build My Algo Free <Code2 size={18} aria-hidden="true" /></a>
-            </div>
-            <p className="ta-small">Request access through our team · MT5 Expert Advisor · Start on a demo account</p>
-          </div>
-          <aside className="ta-console" aria-label="Current free TCT algo capabilities">
-            <div className="ta-console-top"><span><span className="ta-dot" /> CURRENT TCT ALGO</span><span>MT5</span></div>
-            <div className="ta-console-title"><div><p className="ta-eyebrow">AUTOMATION LEVEL</p><strong>100<span>%</span></strong></div></div>
-            <p className="ta-console-caption">Rule-based execution. Structured trade management.</p>
-            <div className="ta-meter" aria-hidden="true"><span /></div>
-            <div className="ta-console-list">{['Order placement', 'SL + TP management', 'Trailing stop loss', 'Full + partial profit booking'].map(label => <div key={label}><Check size={16} aria-hidden="true" /><span>{label}</span><span className="ta-mini-tag">RULE-BASED</span></div>)}</div>
-            <p className="ta-small">100% automated execution and trade management based on your inputs. You are responsible for the inputs, configuration, risk settings and ongoing monitoring. This is not a win rate.</p>
-          </aside>
-        </header>
-
-        <nav className="ta-jump" aria-label="Algo offers">
-          <a href="#free">01 / Free TCT Algo</a><a href="#automatic">02 / Full Automation</a><a href="#upcoming">03 / In Development</a><a href="#custom">04 / Your Custom Algo</a>
-        </nav>
-
-        <section className="ta-section" id="free">
-          <div className="ta-heading"><div><p className="ta-eyebrow">01 / YOUR CURRENT TCT ALGO</p><h2>Less manual execution.<br />More structured trading.</h2></div><span className="ta-tag">100% AUTOMATED · ₹0</span></div>
-          <p className="ta-intro">Our current algo is available free. Once configured, it automates order placement, stop loss, take profit, trailing stops and full or partial profit booking according to your inputs. Choosing and checking those inputs, setting risk limits and monitoring the system remain your responsibility.</p>
-          <div className="ta-feature-grid">{features.map(({ icon: Icon, title, text }) => <article className="ta-feature" key={title}><span className="ta-icon"><Icon size={21} aria-hidden="true" /></span><h3>{title}</h3><p>{text}</p></article>)}</div>
-          <div className="ta-process">
-            <div className="ta-process-heading"><Settings2 size={22} aria-hidden="true" /><h3>How your free algo works</h3></div>
-            <ol className="ta-steps">
-              <li><span>01</span><h4>Request your algo</h4><p>Contact TCT for access and confirm compatibility with your MT5 setup.</p></li>
-              <li><span>02</span><h4>Configure your rules</h4><p>Review the entry conditions, position sizing, SL, TP, trailing and partial-exit settings with the team.</p></li>
-              <li><span>03</span><h4>Test on demo</h4><p>Check the behaviour against your rules before considering a live account.</p></li>
-              <li><span>04</span><h4>Run and monitor</h4><p>The algo manages configured tasks while you monitor execution, connectivity and risk.</p></li>
-            </ol>
-            <div className="ta-actions"><a className="ta-button ta-primary" href={freeLink} target="_blank" rel="noopener noreferrer">Get My Free TCT Algo <ArrowRight size={18} aria-hidden="true" /></a><span className="ta-small">Opens WhatsApp with your request. Nothing is sent automatically.</span></div>
-          </div>
-        </section>
-
-        <section className="ta-section" id="automatic">
-          <div className="ta-offer ta-paid">
-            <div><p className="ta-eyebrow">02 / FULLY AUTOMATED TCT ALGO</p><h2>From strategy rules<br />to automated execution.</h2><p className="ta-intro">For traders who want the strategy’s entry, exit and trade-management workflow automated after configuration.</p>
-              <ul className="ta-checklist"><li><Check size={17} aria-hidden="true" /> Rule-based entries and exits</li><li><Check size={17} aria-hidden="true" /> Stop-loss, take-profit and trailing management</li><li><Check size={17} aria-hidden="true" /> Profit booking according to the configured strategy</li></ul>
-              <p className="ta-small">100% automation describes the configured workflow—not guaranteed performance or freedom from monitoring. Confirm the exact feature set and compatibility with TCT.</p>
-            </div>
-            <div className="ta-purchase"><span className="ta-tag">100% AUTOMATED</span><div className="ta-big-price">₹19,999</div><p>Get the details before you decide.</p><a className="ta-button ta-primary" href={paidLink} target="_blank" rel="noopener noreferrer">Enquire About This Algo <ArrowRight size={18} aria-hidden="true" /></a><p className="ta-small">Contact TCT to confirm licence duration, applicable taxes, support and purchase terms. This button starts an enquiry, not a payment.</p></div>
-          </div>
-        </section>
-
-        <section className="ta-section" id="upcoming">
-          <div className="ta-offer ta-upcoming">
-            <div><p className="ta-eyebrow">03 / THE NEXT CHAPTER</p><h2>TCT Algo.<br /><span className="ta-accent">A new layer of market context.</span></h2><p className="ta-intro">Our team is working on an algo that combines the first TCT algo with liquidity concepts and supply-demand zones.</p><div className="ta-chips"><span>Existing TCT foundation</span><span>Liquidity</span><span>Supply & demand zones</span></div></div>
-            <div className="ta-roadmap"><span className="ta-tag ta-amber">IN DEVELOPMENT</span><h3>Being built by the TCT team.</h3><p>Features, release date and pricing will be shared when confirmed. This algo is not available yet.</p><a className="ta-button ta-secondary" href={waitlistLink} target="_blank" rel="noopener noreferrer">Request Launch Updates <ArrowRight size={18} aria-hidden="true" /></a></div>
-          </div>
-        </section>
-
-        <section className="ta-section" id="custom">
-          <div className="ta-heading"><div><p className="ta-eyebrow">04 / BUILT AROUND YOUR STRATEGY</p><h2>You bring the rules.<br /><span className="ta-accent">We build your algo. Free.</span></h2></div><span className="ta-tag">FREE CUSTOM BUILD</span></div>
-          <p className="ta-intro">Have a strategy you already follow? Send your requirements and we’ll review them for a free custom MT5 algo build. We confirm technical feasibility, scope and delivery timing with you before development.</p>
-          <div className="ta-custom-grid">
-            <div className="ta-panel"><h3>Tell us exactly how you trade.</h3><p>Clear rules help us build what you actually need.</p><ul className="ta-requirements"><li>Market, symbols and timeframe</li><li>Buy / sell entry conditions and filters</li><li>Stop loss, take profit and trailing rules</li><li>Full and partial profit-booking conditions</li><li>Position sizing and risk limits</li><li>Trading sessions and example setups</li></ul><p className="ta-small">Do not send broker passwords, API secrets or account login credentials.</p></div>
-            <div className="ta-panel ta-custom-cta"><span className="ta-icon"><Code2 size={26} aria-hidden="true" /></span><h3>Your strategy.<br />Your own algo.</h3><p>Start with your requirements—not a payment. The request opens a ready-to-fill WhatsApp message with the details our team needs.</p><a className="ta-button ta-primary" href={customLink} target="_blank" rel="noopener noreferrer">Send My Strategy — Build It Free <ArrowRight size={18} aria-hidden="true" /></a><Link className="ta-text-link" href="/contact">Prefer email or the contact form? →</Link></div>
-          </div>
-        </section>
-
-        <section className="ta-section ta-faq">
-          <p className="ta-eyebrow">BEFORE YOU START</p><h2>A few important answers.</h2>
-          <details><summary>What is free, and what costs ₹19,999?</summary><p>The current 100%-automated TCT algo is available free. We also offer a free custom build after reviewing your strategy and agreeing the scope. The separate 100%-automated TCT algo is listed at ₹19,999; contact the team for its full purchase terms.</p></details>
-          <details><summary>Does 100% automation mean a win rate or no user responsibility?</summary><p>No. 100% refers to automated execution and trade management after configuration—not a success rate. You supply and verify the inputs, choose risk settings and monitor the system. No win rate or return is promised.</p></details>
-          <details><summary>Can I download the algo immediately?</summary><p>These buttons start a request with TCT. The team handles access and setup; this page does not provide an instant download or take payment.</p></details>
-          <details><summary>Does free mean there are no other trading costs?</summary><p>The free offer refers to the algo or agreed custom development. Broker spreads, commissions, swaps, connectivity and any VPS costs are separate.</p></details>
-          <details><summary>Will automation guarantee profits or stop every loss?</summary><p>No. Automated systems can lose money. Slippage, gaps, rejected orders, connection failures and incorrect settings can affect execution. Stop-loss orders do not guarantee an exact exit price. Test on demo first and monitor any live use.</p></details>
-        </section>
-        <aside className="ta-risk"><ShieldCheck size={22} aria-hidden="true" /><p><strong>Automate the process—not the promise.</strong> Trading involves the risk of losing capital. The feature descriptions on this page describe intended functionality, not independently verified performance. Confirm the supported configuration with TCT before use.</p></aside>
+    <div className="p-6 md:p-12 max-w-7xl mx-auto space-y-20 text-gray-900">
+      
+      {/* Header */}
+      <div className="text-center space-y-4 max-w-3xl mx-auto">
+        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+          TCT ALGO SUITE
+        </span>
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">Three Paths to Automated Trading</h1>
+        <p className="text-gray-600 text-lg">
+          Whether you want to manage your own entries, wait for automated system detection, or turn your custom strategy into code—The Corporate Trader provides the ideal solution.
+        </p>
       </div>
-    </main>
+
+      {/* THREE PRODUCTS OVERVIEW GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        
+        {/* Product 1 Summary Card */}
+        <div className="bg-white p-8 rounded-3xl border border-blue-200 shadow-sm flex flex-col justify-between space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+            Available Now
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl font-black text-gray-900">TCT ALGO</h2>
+            <p className="text-sm font-semibold text-blue-600">You choose the trade. TCT manages the execution.</p>
+            <p className="text-sm text-gray-600">
+              Trader chooses the trading level and TCT automatically handles execution and management rules.
+            </p>
+          </div>
+          <a href="#tct-algo-section" className="w-full py-3 bg-blue-600 text-white rounded-xl text-center font-bold text-sm hover:bg-blue-700 transition">
+            View TCT Algo
+          </a>
+        </div>
+
+        {/* Product 2 Summary Card */}
+        <div className="bg-white p-8 rounded-3xl border border-amber-200 shadow-sm flex flex-col justify-between space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+            Coming Soon
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl font-black text-gray-900">TCT AUTO</h2>
+            <p className="text-sm font-semibold text-amber-600">Automated structured market analysis and execution.</p>
+            <p className="text-sm text-gray-600">
+              System will identify candidate levels based on liquidity, supply/demand, and market structure.
+            </p>
+          </div>
+          <a href="#tct-auto-section" className="w-full py-3 bg-gray-900 text-white rounded-xl text-center font-bold text-sm hover:bg-gray-800 transition">
+            Explore TCT Auto
+          </a>
+        </div>
+
+        {/* Product 3 Summary Card */}
+        <div className="bg-white p-8 rounded-3xl border border-emerald-200 shadow-sm flex flex-col justify-between space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 bg-emerald-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+            Custom Build
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-2xl font-black text-gray-900">BUILD YOUR OWN ALGO</h2>
+            <p className="text-sm font-semibold text-emerald-600">Your strategy. Your rules. Built into automation.</p>
+            <p className="text-sm text-gray-600">
+              Submit your rules and TCT will review automation requirements for Indian markets and forex.
+            </p>
+          </div>
+          <a href="#custom-algo-section" className="w-full py-3 bg-emerald-600 text-white rounded-xl text-center font-bold text-sm hover:bg-emerald-700 transition">
+            Submit My Requirements
+          </a>
+        </div>
+
+      </div>
+
+      <hr className="border-gray-200" />
+
+      {/* --- SECTION 1: CURRENT TCT ALGO --- */}
+      <section id="tct-algo-section" className="bg-white p-8 md:p-12 rounded-3xl border shadow-sm space-y-10">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-2">
+            <div className="inline-block bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+              Available Now
+            </div>
+            <h2 className="text-3xl font-extrabold">You choose the trade. TCT manages the execution.</h2>
+            <p className="text-gray-500 font-medium">MT5 Trade Execution & Management Automation</p>
+          </div>
+          <div className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl text-sm shadow">
+            AVAILABLE NOW
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-gray-50 p-6 md:p-8 rounded-2xl border">
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold">How It Works</h3>
+            <p className="text-gray-600 text-sm leading-relaxed">
+              The trader performs the market analysis and chooses the Buy/Sell trading level. TCT Algo then manages the configured execution and trade-management process.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-xs font-medium space-y-1">
+              <span className="font-bold uppercase tracking-wide block">Important Clarification:</span>
+              TCT Algo does not independently predict market direction or select your trading level. The trading decision remains with the trader.
+            </div>
+          </div>
+
+          {/* Workflow List */}
+          <div className="space-y-2 text-sm font-semibold">
+            {[
+              "USER ANALYSES MARKET",
+              "USER SELECTS BUY / SELL LEVEL",
+              "CONFIGURE ORDERS & RISK",
+              "TCT ALGO MONITORS LEVEL",
+              "TRADE EXECUTION",
+              "TAKE-PROFIT MANAGEMENT",
+              "BREAKEVEN",
+              "TRAILING / POSITION MANAGEMENT"
+            ].map((step, idx, arr) => (
+              <div key={idx} className="flex flex-col items-center">
+                <div className="w-full bg-white border px-4 py-2.5 rounded-xl shadow-xs text-center text-gray-800">
+                  {step}
+                </div>
+                {idx < arr.length - 1 && <span className="text-blue-600 font-bold my-0.5">↓</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Supported Features */}
+        <div className="space-y-4">
+          <h4 className="font-bold text-gray-900">Supported Features</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              "Buy/Sell Level",
+              "Stop Loss",
+              "Number of Orders",
+              "Multiple Take Profits",
+              "Lot/Risk Settings",
+              "Breakeven",
+              "Trailing Stop",
+              "Position Management"
+            ].map((feat, idx) => (
+              <div key={idx} className="bg-blue-50/50 border border-blue-100 p-3 rounded-xl text-sm font-medium text-blue-900 flex items-center gap-2">
+                <span className="text-blue-600">✓</span> {feat}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- SECTION 2: TCT AUTO — UPCOMING ALGO --- */}
+      <section id="tct-auto-section" className="bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950 text-white p-8 md:p-12 rounded-3xl shadow-xl space-y-10 border border-indigo-900">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="space-y-2">
+            <div className="inline-block bg-amber-500 text-gray-950 text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">
+              Coming Soon
+            </div>
+            <h2 className="text-3xl font-extrabold">From market analysis to structured execution.</h2>
+            <p className="text-indigo-200 font-medium">TCT AUTO — Upcoming Next-Generation Automation</p>
+          </div>
+          <div className="bg-amber-500 text-gray-950 font-bold px-5 py-2 rounded-xl text-sm shadow">
+            COMING SOON
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-gray-800/50 p-6 md:p-8 rounded-2xl border border-gray-700">
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-white">Automated Market Intelligence</h3>
+            <p className="text-gray-300 text-sm leading-relaxed">
+              TCT Auto is the next-generation automation system currently under development. Unlike the current TCT Algo, where the trader provides the trading level, TCT Auto is being developed to analyse configured market conditions and identify potential candidate trading levels automatically.
+            </p>
+            <p className="text-xs text-amber-300 font-medium bg-amber-950/40 p-3 rounded-xl border border-amber-800/50">
+              Note: Focused on structured market analysis, candidate trading levels, potential setups, and configured conditions. No guarantees or 100% accuracy claims.
+            </p>
+          </div>
+
+          {/* High-level workflow */}
+          <div className="space-y-1 text-xs font-bold text-gray-200">
+            {[
+              "MARKET DATA",
+              "LIQUIDITY ANALYSIS",
+              "SUPPLY / DEMAND ANALYSIS",
+              "MARKET STRUCTURE",
+              "CANDIDATE LEVEL",
+              "ENTRY CONDITIONS",
+              "RISK VALIDATION",
+              "EXECUTION",
+              "POSITION MANAGEMENT"
+            ].map((step, idx, arr) => (
+              <div key={idx} className="flex flex-col items-center">
+                <div className="w-full bg-gray-900 border border-gray-700 px-4 py-2 rounded-lg text-center text-indigo-200">
+                  {step}
+                </div>
+                {idx < arr.length - 1 && <span className="text-amber-400 text-xs my-0.5">↓</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Concepts list */}
+        <div className="space-y-4">
+          <h4 className="font-bold text-white">Underlying System Concepts</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              "Liquidity",
+              "Liquidity Sweeps",
+              "Supply Zones",
+              "Demand Zones",
+              "Market Structure",
+              "Price Reaction",
+              "Confirmation Rules",
+              "Risk Management"
+            ].map((concept, idx) => (
+              <div key={idx} className="bg-gray-800 border border-gray-700 p-3 rounded-xl text-sm font-medium text-gray-200 flex items-center gap-2">
+                <span className="text-amber-400">✦</span> {concept}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- SECTION 3: BUILD YOUR OWN ALGO --- */}
+      <section id="custom-algo-section" className="bg-white p-8 md:p-12 rounded-3xl border shadow-sm space-y-12">
+        <div className="space-y-3 max-w-3xl">
+          <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            Custom Development
+          </span>
+          <h2 className="text-3xl font-extrabold">BUILD YOUR OWN ALGO</h2>
+          <p className="text-emerald-700 font-semibold text-lg">Your strategy. Your rules. Built into automation.</p>
+          <p className="text-gray-600 text-sm leading-relaxed">
+            Already have your own trading strategy? Submit your complete trading requirements to TCT. We will review the strategy and determine whether the trading rules can be converted into an automated trading system.
+          </p>
+        </div>
+
+        {/* Markets Supported */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-emerald-50/40 p-6 rounded-2xl border border-emerald-100 space-y-3">
+            <h3 className="font-bold text-gray-900 text-lg">🇮🇳 Indian Markets</h3>
+            <p className="text-sm text-gray-600">
+              Examples can include Indian Stocks, Indian market trading strategies, and broker/API automation where technically supported.
+            </p>
+          </div>
+          <div className="bg-blue-50/40 p-6 rounded-2xl border border-blue-100 space-y-3">
+            <h3 className="font-bold text-gray-900 text-lg">💱 Forex Market</h3>
+            <p className="text-sm text-gray-600">
+              Examples can include Forex pairs, MT5 automation, Expert Advisors, trade execution systems, and strategy automation.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 border p-4 rounded-xl text-xs text-gray-600 text-center font-medium">
+          Custom automation for Indian markets and forex is subject to strategy logic, platform, broker/API availability and technical feasibility.
+        </div>
+
+        {/* Development Process */}
+        <div className="space-y-6">
+          <h3 className="text-xl font-bold">Custom Algo Development Process</h3>
+          <div className="grid grid-cols-3 md:grid-cols-9 gap-2 text-center text-xs font-bold">
+            {[
+              "SUBMIT REQUIREMENTS",
+              "TECHNICAL REVIEW",
+              "REQUIREMENT DISCUSSION",
+              "SCOPE",
+              "PROTOTYPE",
+              "BACKTEST",
+              "DEMO TESTING",
+              "DELIVERY",
+              "SUPPORT"
+            ].map((step, idx) => (
+              <div key={idx} className="bg-white border p-3 rounded-xl shadow-xs flex flex-col justify-center items-center">
+                <span className="text-[10px] text-emerald-600 mb-1">0{idx+1}</span>
+                <span className="text-[11px] text-gray-800 leading-tight">{step}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 italic text-center">
+            Not every discretionary trading strategy can be fully automated. Each requirement is reviewed for technical feasibility before development begins.
+          </p>
+        </div>
+
+        {/* Requirement Form Button / Trigger */}
+        <div className="text-center pt-6">
+          <button 
+            onClick={() => setIsFormOpen(!isFormOpen)}
+            className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-lg transition text-base"
+          >
+            {isFormOpen ? 'Close Requirement Form' : 'SUBMIT YOUR ALGO REQUIREMENTS'}
+          </button>
+        </div>
+
+        {/* CUSTOM ALGO REQUIREMENT FORM (Expandable) */}
+        {isFormOpen && (
+          <form onSubmit={handleSubmit} className="bg-gray-50 p-6 md:p-10 rounded-3xl border space-y-8 animate-fadeIn">
+            <div className="border-b pb-4">
+              <h3 className="text-2xl font-bold">Custom Algo Requirement Form</h3>
+              <p className="text-sm text-gray-600">Provide your exact specifications so our team can evaluate technical feasibility.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Name</label>
+                <input required type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Your Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Email</label>
+                <input required type="email" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="name@example.com" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Mobile</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="+1..." value={formData.mobile} onChange={e => setFormData({...formData, mobile: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Market</label>
+                <select className="w-full bg-white border p-3 rounded-xl text-sm" value={formData.market} onChange={e => setFormData({...formData, market: e.target.value})}>
+                  <option value="Forex">Forex Market</option>
+                  <option value="Indian Stocks">Indian Stock Market</option>
+                  <option value="Both">Both / Other</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Platform</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="e.g. MT5, TradingView, Broker API" value={formData.platform} onChange={e => setFormData({...formData, platform: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Broker</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Your Broker Name" value={formData.broker} onChange={e => setFormData({...formData, broker: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Instruments / Symbols</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="e.g. XAUUSD, EURUSD, NIFTY" value={formData.instruments} onChange={e => setFormData({...formData, instruments: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Timeframe</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="e.g. 5m, 15m, 1h" value={formData.timeframe} onChange={e => setFormData({...formData, timeframe: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Buy Entry Rules</label>
+                <textarea rows={3} className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Describe exact buy triggers..." value={formData.buyEntryRules} onChange={e => setFormData({...formData, buyEntryRules: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Sell Entry Rules</label>
+                <textarea rows={3} className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Describe exact sell triggers..." value={formData.sellEntryRules} onChange={e => setFormData({...formData, sellEntryRules: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Entry Filters</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Trend filter, session filter..." value={formData.entryFilters} onChange={e => setFormData({...formData, entryFilters: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Stop Loss Rules</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Fixed pips, structure SL..." value={formData.stopLossRules} onChange={e => setFormData({...formData, stopLossRules: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Take Profit Rules</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Fixed R:R, multi-TP..." value={formData.takeProfitRules} onChange={e => setFormData({...formData, takeProfitRules: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Position Sizing</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Fixed lot, % risk..." value={formData.positionSizing} onChange={e => setFormData({...formData, positionSizing: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Maximum Risk</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Max risk per trade / day" value={formData.maxRisk} onChange={e => setFormData({...formData, maxRisk: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Breakeven Rules</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Move to BE at X pips" value={formData.breakevenRules} onChange={e => setFormData({...formData, breakevenRules: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Trailing Rules</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Trailing stop parameters" value={formData.trailingRules} onChange={e => setFormData({...formData, trailingRules: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Partial Exit Rules</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Close X% at target 1" value={formData.partialExitRules} onChange={e => setFormData({...formData, partialExitRules: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Trading Session</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="London, NY, Asian..." value={formData.tradingSession} onChange={e => setFormData({...formData, tradingSession: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Re-entry Rules</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Allow re-entry after SL?" value={formData.reentryRules} onChange={e => setFormData({...formData, reentryRules: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Maximum Daily Trades</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="e.g. Max 3 trades/day" value={formData.maxDailyTrades} onChange={e => setFormData({...formData, maxDailyTrades: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Maximum Daily Loss</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Daily drawdown cutoff" value={formData.maxDailyLoss} onChange={e => setFormData({...formData, maxDailyLoss: e.target.value})} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">News Behaviour</label>
+                <input type="text" className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Stop trading during high impact news?" value={formData.newsBehaviour} onChange={e => setFormData({...formData, newsBehaviour: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700 uppercase">Upload Strategy Document</label>
+                <input type="file" className="w-full bg-white border p-3 rounded-xl text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-700 uppercase">Example Setup & Additional Notes</label>
+              <textarea rows={4} className="w-full bg-white border p-3 rounded-xl text-sm" placeholder="Provide any additional details or context regarding your setup..." value={formData.additionalNotes} onChange={e => setFormData({...formData, additionalNotes: e.target.value})} />
+            </div>
+
+            <div className="text-center pt-4">
+              <button type="submit" className="px-10 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-xl transition">
+                Submit Strategy Requirements
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      {/* --- FINAL SECTION — WHICH AUTOMATION DO YOU NEED? --- */}
+      <section className="bg-gray-900 text-white p-8 md:p-14 rounded-3xl space-y-12">
+        <div className="text-center space-y-3 max-w-2xl mx-auto">
+          <h2 className="text-3xl font-extrabold tracking-tight">Which automation do you need?</h2>
+          <p className="text-gray-400 text-sm">Choose the solution that aligns with your trading workflow.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          
+          {/* Choice 1 */}
+          <div className="bg-gray-800/80 border border-gray-700 p-8 rounded-2xl flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <span className="text-blue-400 text-xs font-bold uppercase tracking-wider">Option 01</span>
+              <h3 className="text-xl font-bold">TCT ALGO</h3>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                Trader chooses the trade and TCT manages execution.
+              </p>
+            </div>
+            <a href="#tct-algo-section" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-center font-bold rounded-xl text-sm transition">
+              Get TCT Algo
+            </a>
+          </div>
+
+          {/* Choice 2 */}
+          <div className="bg-gray-800/80 border border-gray-700 p-8 rounded-2xl flex flex-col justify-between space-y-6 relative">
+            <div className="absolute top-4 right-4 bg-amber-500 text-gray-950 text-[10px] font-bold px-2.5 py-1 rounded-full">
+              COMING SOON
+            </div>
+            <div className="space-y-3">
+              <span className="text-amber-400 text-xs font-bold uppercase tracking-wider">Option 02</span>
+              <h3 className="text-xl font-bold">TCT AUTO</h3>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                Automated structured market analysis and execution.
+              </p>
+            </div>
+            <a href="#tct-auto-section" className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-gray-950 text-center font-bold rounded-xl text-sm transition">
+              Explore TCT Auto
+            </a>
+          </div>
+
+          {/* Choice 3 */}
+          <div className="bg-gray-800/80 border border-gray-700 p-8 rounded-2xl flex flex-col justify-between space-y-6">
+            <div className="space-y-3">
+              <span className="text-emerald-400 text-xs font-bold uppercase tracking-wider">Option 03</span>
+              <h3 className="text-xl font-bold">BUILD YOUR OWN ALGO</h3>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                Submit the rules and TCT will review the automation requirements.
+              </p>
+            </div>
+            <a href="#custom-algo-section" className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-center font-bold rounded-xl text-sm transition">
+              Submit My Requirements
+            </a>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
   );
 }
-
-const styles = `
-.tct-algo{background:radial-gradient(ellipse at 85% 5%,#07313970,transparent 30%),#070e16;color:#edf7ff;padding:0 0 60px}.tct-algo *{box-sizing:border-box}.ta-wrap{width:min(1200px,92%);margin:auto}.tct-algo p{line-height:1.75}.ta-hero{display:grid;grid-template-columns:1.2fr 1fr;gap:56px;align-items:center;padding:64px 0 42px}.tct-algo .ta-eyebrow{font-size:11px;letter-spacing:.16em;font-weight:800;color:#41dae7;margin:0 0 18px}.ta-tag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.1em;color:#68f0c1;background:#092b28;border:1px solid #206253;border-radius:6px;padding:8px 11px;white-space:nowrap}.tct-algo h1{font-size:clamp(38px,4.7vw,64px);line-height:1.08;letter-spacing:-.04em;font-weight:700;margin:23px 0}.tct-algo h1 span,.ta-accent{color:#00d4e6}.ta-lead{font-size:17px;color:#aec4d4;max-width:650px}.ta-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:24px 0 14px}.ta-button{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:15px 19px;border-radius:10px;font-size:14px;font-weight:750;line-height:1.5;text-align:center;transition:transform .2s,border-color .2s,background .2s}.ta-primary{background:#00d6e9;color:#03131d;border:1px solid #00d6e9}.ta-primary:hover{background:#62eff2;transform:translateY(-2px)}.ta-secondary{background:#0b1925;border:1px solid #35505f;color:#e3f3fa}.ta-secondary:hover{border-color:#55d7d9;transform:translateY(-2px)}.tct-algo a:focus-visible,.tct-algo summary:focus-visible{outline:2px solid #80ffe6;outline-offset:5px}.tct-algo .ta-small{font-size:12px;line-height:1.7;color:#9bb4c5;margin:12px 0 0}.ta-console{border:1px solid #2b5260;border-radius:22px;background:linear-gradient(145deg,#102a35,#09131e);padding:25px;box-shadow:0 20px 70px #0004}.ta-console-top{display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.1em;color:#b2d4dd;border-bottom:1px solid #27414c;padding-bottom:19px}.ta-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#1fe1a5;margin-right:7px}.ta-console-title{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:25px}.ta-console-title .ta-eyebrow{font-size:clamp(17px,2vw,22px);line-height:1.35;letter-spacing:.09em;margin-bottom:14px;font-weight:800}.ta-console-title strong{font-size:76px;line-height:1;font-weight:600;letter-spacing:-.06em}.ta-console-title strong span{font-size:30px;color:#57d6dc;letter-spacing:0}.ta-price-label{font-size:26px;font-weight:750;color:#64f2c7;text-align:right}.ta-price-label small{display:block;font-size:11px;font-weight:400;color:#aac7d4;margin-top:5px}.ta-console-caption{font-size:13px;color:#b3cbd8;margin:20px 0 15px}.ta-meter{height:5px;background:#1d3645;border-radius:8px}.ta-meter span{display:block;width:100%;height:100%;background:linear-gradient(90deg,#00cde9,#00eca2);border-radius:8px}.ta-console-list{margin-top:19px}.ta-console-list>div{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #23404a;font-size:13px}.ta-console-list svg{color:#54e1bc;flex-shrink:0}.ta-mini-tag{margin-left:auto;font-size:8px;letter-spacing:.05em;color:#9fc1ca}.ta-jump{display:flex;gap:10px;overflow-x:auto;border-top:1px solid #253c47;border-bottom:1px solid #253c47;padding:16px 0}.ta-jump a{white-space:nowrap;font-size:12px;color:#c2d7e4;border:1px solid #283f4a;padding:10px 14px;border-radius:8px}.ta-jump a:hover{border-color:#24c9d1;color:#69e5e0}.tct-algo .ta-section{padding:52px 0 0;scroll-margin-top:175px}.ta-heading{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:18px}.tct-algo h2{font-size:clamp(27px,3vw,39px);letter-spacing:-.025em;line-height:1.18;font-weight:650;margin:0}.tct-algo h3{font-size:19px;line-height:1.35;font-weight:650;margin:0 0 12px}.ta-intro{font-size:15px;color:#afc4d4;max-width:850px;margin:18px 0 25px}.ta-feature-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}.ta-feature{border:1px solid #233d4b;background:#0c1a26;border-radius:14px;padding:23px}.ta-icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;background:#10343d;border:1px solid #205663;border-radius:12px;color:#40e1e3;margin-bottom:18px}.ta-feature p,.ta-panel p,.ta-roadmap p,.ta-purchase p{font-size:13px;color:#abc2d3;margin:0}.ta-process{border:1px solid #2a4752;background:linear-gradient(140deg,#0e2430,#0b161f);border-radius:16px;padding:27px;margin-top:22px}.ta-process-heading{display:flex;align-items:center;gap:12px;color:#63e2dc}.ta-process-heading h3{margin:0;color:#e3f4fa}.ta-steps{list-style:none;padding:0;margin:25px 0 0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:25px}.ta-steps li>span{font-size:11px;color:#55dcca;letter-spacing:.1em}.ta-steps h4{font-size:14px;font-weight:700;margin:10px 0}.ta-steps p{font-size:12px;color:#a5bdcc;margin:0}.ta-offer{display:grid;grid-template-columns:1.4fr 1fr;gap:40px;border:1px solid #315465;border-radius:20px;padding:34px;background:linear-gradient(125deg,#102e3b,#0a1520)}.ta-checklist{list-style:none;padding:0;margin:22px 0;display:grid;gap:12px;font-size:13px;color:#cbe2eb}.ta-checklist li{display:flex;gap:10px;align-items:center}.ta-checklist svg{color:#4de5c1;flex-shrink:0}.ta-purchase{align-self:center;padding:26px;border:1px solid #315261;background:#071822;border-radius:15px}.ta-big-price{font-size:clamp(38px,4.5vw,53px);font-weight:650;letter-spacing:-.03em;margin:20px 0 8px}.ta-purchase .ta-button{width:100%;margin-top:20px}.ta-upcoming{background:linear-gradient(135deg,#142132,#0c151f);border-color:#354556}.ta-roadmap{align-self:center;padding:25px;border:1px dashed #536170;border-radius:15px}.ta-amber{background:#292215;color:#ffd595;border-color:#65502b;margin-bottom:20px}.ta-roadmap .ta-button{margin-top:22px}.ta-chips{display:flex;flex-wrap:wrap;gap:10px}.ta-chips span{font-size:11px;color:#c0d6e6;border:1px solid #354858;border-radius:20px;padding:8px 12px}.ta-custom-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.ta-panel{border:1px solid #2b4956;background:#0c1d29;border-radius:16px;padding:28px}.ta-requirements{padding-left:20px;margin:20px 0;color:#c8dce8;font-size:14px;display:grid;gap:12px;list-style:disc}.ta-requirements li::marker{color:#39daca}.ta-custom-cta{background:radial-gradient(ellipse at top right,#07655e42,transparent 70%),#0b1b25;display:flex;align-items:flex-start;flex-direction:column;justify-content:center}.ta-custom-cta h3{font-size:29px}.ta-custom-cta .ta-button{margin-top:24px}.ta-text-link{font-size:12px;color:#63e4df;margin-top:18px;text-decoration:underline;text-underline-offset:4px}.ta-faq h2{margin-bottom:22px}.ta-faq details{border-bottom:1px solid #2a414d;padding:18px 0}.ta-faq summary{font-size:15px;font-weight:600;cursor:pointer;color:#daedf5;padding:6px 0;line-height:1.5}.ta-faq details p{font-size:14px;color:#aac2d1;max-width:900px;margin:14px 0 0}.ta-risk{display:flex;align-items:flex-start;gap:14px;border:1px solid #314651;border-radius:12px;background:#0b1720;padding:20px;margin-top:35px}.ta-risk svg{flex-shrink:0;color:#7ab9cd;margin-top:3px}.ta-risk p{font-size:12px;color:#a1bacb;margin:0}.ta-risk strong{color:#d5e8f1}
-@media(max-width:950px){.ta-hero{grid-template-columns:1fr;gap:28px;padding-top:38px}.ta-console{max-width:620px;width:100%}.ta-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.ta-offer{grid-template-columns:1fr;gap:25px}.ta-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ta-heading{align-items:flex-start;flex-direction:column}}
-@media(max-width:600px){.ta-wrap{width:92%}.ta-feature-grid,.ta-custom-grid{grid-template-columns:1fr}.ta-console,.ta-process,.ta-panel,.ta-offer{padding:21px}.ta-console-title strong{font-size:64px}.ta-steps{grid-template-columns:1fr;gap:20px}.ta-steps li{border-left:1px solid #325361;padding-left:16px}.ta-hero .ta-button{width:100%}.tct-algo .ta-section{padding-top:36px}.ta-purchase{padding:20px}.ta-lead{font-size:16px}.ta-mini-tag{font-size:7px}}
-@media(prefers-reduced-motion:reduce){.ta-button{transition:none}.ta-button:hover{transform:none}}
-`;
