@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import GoogleIcon from '@/components/GoogleIcon';
+import { GoogleIcon } from '@/components/GoogleIcon';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
