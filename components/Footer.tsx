@@ -22,7 +22,7 @@ const exploreLinks: FooterLink[] = [
 const resourceLinks: FooterLink[] = [
   { label: 'Library', href: '/library' },
   { label: 'Articles', href: '/articles' },
-  { label: 'Post', href: '/post' },
+  { label: 'Market Watch', href: '/post' },
   { label: 'Help', href: '/help' },
   { label: 'FAQ', href: '/faq' },
   { label: 'Liquidity Algo', href: '/liquidity-algo' },
@@ -64,7 +64,7 @@ export function Footer() {
             <h3>The Corporate Trader</h3>
             <p className="foottag">Trade. Track. Improve. Automate.</p>
             <p>
-              AI-configured trading journals, MT5 automation, customised algos, and practical
+              Private trading journals, MT5 automation, custom algorithms, and practical
               market education — built around process over promises.
             </p>
           </div>
