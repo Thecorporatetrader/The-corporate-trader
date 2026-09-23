@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { ArrowRight, BookOpen, ChartNoAxesCombined, ShieldCheck } from 'lucide-react';
-import Nav from './Nav';
+import { Nav } from './Nav';
 import { Footer } from './Footer';
 
 interface PageHeroProps {
