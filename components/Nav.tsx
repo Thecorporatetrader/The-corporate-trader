@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, X, ChevronDown, User } from "lucide-react";
-// Import your auth client if using Supabase directly, e.g.:
-// import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { Menu, X, ChevronDown, User, Globe, TrendingUp, TrendingDown } from "lucide-react";
 
 export function Nav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -24,6 +22,7 @@ export function Nav() {
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
+      {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
         {/* Logo */}
@@ -114,7 +113,7 @@ export function Nav() {
             Market Watch
           </Link>
           
-          {/* Fixed Route: Support (pointing to /help or /support page) */}
+          {/* Fixed Route: Support */}
           <Link href="/help" className="text-sm font-medium hover:text-primary transition-colors">
             Support
           </Link>
@@ -157,6 +156,51 @@ export function Nav() {
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
+        </div>
+      </div>
+
+      {/* Market Watch, Financial & Macro News Ticker Bar */}
+      <div className="bg-muted/60 border-t border-border py-2 px-4 overflow-hidden text-xs">
+        <div className="max-w-7xl mx-auto flex items-center space-x-8 whitespace-nowrap overflow-x-auto scrollbar-none">
+          <div className="flex items-center space-x-1.5 font-bold text-primary">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>MARKET WATCH</span>
+          </div>
+          
+          {/* XAGUSD */}
+          <div className="flex items-center space-x-2">
+            <span className="text-muted-foreground font-medium">XAGUSD</span>
+            <span className="font-mono">65.17950</span>
+            <span className="text-rose-500 flex items-center font-mono">-1.88 (-2.80%)</span>
+          </div>
+
+          {/* Bitcoin */}
+          <div className="flex items-center space-x-2">
+            <span className="text-muted-foreground font-medium">Bitcoin</span>
+            <span className="font-mono">85,886.01</span>
+            <span className="text-rose-500 flex items-center font-mono">-322.55 (-0.37%)</span>
+          </div>
+
+          {/* Ethereum */}
+          <div className="flex items-center space-x-2">
+            <span className="text-muted-foreground font-medium">Ethereum</span>
+            <span className="font-mono">2,736.31</span>
+            <span className="text-rose-500 flex items-center font-mono">-17.32 (-0.63%)</span>
+          </div>
+
+          {/* US Oil */}
+          <div className="flex items-center space-x-2">
+            <span className="text-muted-foreground font-medium">US Oil (WTI)</span>
+            <span className="font-mono">93.57</span>
+            <span className="text-emerald-500 flex items-center font-mono">+1.24 (+1.34%)</span>
+          </div>
+
+          {/* Macro & Economic News Ticker Segment */}
+          <div className="flex items-center space-x-2 pl-4 border-l border-border text-muted-foreground">
+            <Globe className="w-3.5 h-3.5 text-primary" />
+            <span className="font-medium text-foreground">MACRO:</span>
+            <span>US Core CPI Preview in focus • Global Liquidity Index stable • ECB Rate Decision expected Friday</span>
+          </div>
         </div>
       </div>
 
