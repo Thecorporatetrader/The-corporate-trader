@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Menu, X, ChevronDown, User, Globe, TrendingUp, TrendingDown } from "lucide-react";
+import { Menu, X, ChevronDown, User } from "lucide-react";
 
 export function Nav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -108,27 +108,19 @@ export function Nav() {
             )}
           </div>
 
-          {/* Fixed Route: Market Watch */}
+          {/* Market Watch Route */}
           <Link href="/markets" className="text-sm font-medium hover:text-primary transition-colors">
             Market Watch
           </Link>
           
-          {/* Fixed Route: Support */}
+          {/* Support Route */}
           <Link href="/help" className="text-sm font-medium hover:text-primary transition-colors">
             Support
           </Link>
         </nav>
 
-        {/* Right Actions / Auth */}
+        {/* Right Actions / Auth (Standalone Account link removed) */}
         <div className="hidden md:flex items-center space-x-4">
-          <Link
-            href="/account"
-            className="text-sm font-medium hover:text-primary transition-colors"
-          >
-            Account
-          </Link>
-
-          {/* Dynamic Auth Button / User Profile */}
           {user ? (
             <Link
               href="/account"
@@ -156,51 +148,6 @@ export function Nav() {
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
-        </div>
-      </div>
-
-      {/* Market Watch, Financial & Macro News Ticker Bar */}
-      <div className="bg-muted/60 border-t border-border py-2 px-4 overflow-hidden text-xs">
-        <div className="max-w-7xl mx-auto flex items-center space-x-8 whitespace-nowrap overflow-x-auto scrollbar-none">
-          <div className="flex items-center space-x-1.5 font-bold text-primary">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>MARKET WATCH</span>
-          </div>
-          
-          {/* XAGUSD */}
-          <div className="flex items-center space-x-2">
-            <span className="text-muted-foreground font-medium">XAGUSD</span>
-            <span className="font-mono">65.17950</span>
-            <span className="text-rose-500 flex items-center font-mono">-1.88 (-2.80%)</span>
-          </div>
-
-          {/* Bitcoin */}
-          <div className="flex items-center space-x-2">
-            <span className="text-muted-foreground font-medium">Bitcoin</span>
-            <span className="font-mono">85,886.01</span>
-            <span className="text-rose-500 flex items-center font-mono">-322.55 (-0.37%)</span>
-          </div>
-
-          {/* Ethereum */}
-          <div className="flex items-center space-x-2">
-            <span className="text-muted-foreground font-medium">Ethereum</span>
-            <span className="font-mono">2,736.31</span>
-            <span className="text-rose-500 flex items-center font-mono">-17.32 (-0.63%)</span>
-          </div>
-
-          {/* US Oil */}
-          <div className="flex items-center space-x-2">
-            <span className="text-muted-foreground font-medium">US Oil (WTI)</span>
-            <span className="font-mono">93.57</span>
-            <span className="text-emerald-500 flex items-center font-mono">+1.24 (+1.34%)</span>
-          </div>
-
-          {/* Macro & Economic News Ticker Segment */}
-          <div className="flex items-center space-x-2 pl-4 border-l border-border text-muted-foreground">
-            <Globe className="w-3.5 h-3.5 text-primary" />
-            <span className="font-medium text-foreground">MACRO:</span>
-            <span>US Core CPI Preview in focus • Global Liquidity Index stable • ECB Rate Decision expected Friday</span>
-          </div>
         </div>
       </div>
 
@@ -244,14 +191,6 @@ export function Nav() {
             className="block text-base font-medium py-1"
           >
             Support
-          </Link>
-
-          <Link
-            href="/account"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block text-base font-medium py-1"
-          >
-            Account
           </Link>
 
           <div className="pt-2">
