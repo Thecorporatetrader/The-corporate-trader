@@ -5,7 +5,7 @@ import React from 'react';
 
 export default function JournalPage() {
   return (
-    <div className="p-6 md:p-12 max-w-6xl mx-auto space-y-16 text-gray-900">
+    <main className="product-page p-6 md:p-12 max-w-6xl mx-auto space-y-16 bg-gray-50 text-gray-900">
       
       {/* Header Section */}
       <div className="text-center space-y-4">
@@ -14,7 +14,7 @@ export default function JournalPage() {
         </span>
         <h1 className="text-4xl font-extrabold tracking-tight">Inside The Corporate Trader App</h1>
         <p className="text-gray-600 max-w-2xl mx-auto text-lg">
-          Transform your raw data into professional-grade analytics. Designed specifically for Android, our mobile app gives you complete visibility over your edge, risk metrics, and session performance.
+          Turn your trade history into useful insights. Built for Android, TCT Journal helps you review performance, understand risk, and build a consistent review routine.
         </p>
       </div>
 
@@ -26,7 +26,7 @@ export default function JournalPage() {
           </div>
           <h2 className="text-3xl font-bold">Get Ready to Trade Smarter on Mobile</h2>
           <p className="text-blue-200 text-sm md:text-base max-w-lg">
-            Track executions, inspect cumulative performance trajectories, and review your trading psychology directly from your pocket.
+            Track your trades, review your progress, and reflect on your decisions from your phone.
           </p>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -110,6 +110,6 @@ export default function JournalPage() {
         </div>
       </div>
 
-    </div>
+    </main>
   );
 }

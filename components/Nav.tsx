@@ -70,6 +70,14 @@ export function Nav() {
     setOpen(false);
   }, [pathname]);
 
+  // A drawer opened on mobile must not keep desktop scrolling locked.
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 851px)');
+    const closeOnDesktop = () => { if (desktop.matches) setOpen(false); };
+    desktop.addEventListener('change', closeOnDesktop);
+    return () => desktop.removeEventListener('change', closeOnDesktop);
+  }, []);
+
   // Lock background scroll while the drawer is open.
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -151,6 +159,7 @@ export function Nav() {
             <Link
               key={item.label}
               href={item.href}
+              aria-current={isActive(item.href) ? 'page' : undefined}
               className={isActive(item.href) ? 'navlink active' : 'navlink'}
             >
               {item.label}
@@ -188,6 +197,7 @@ export function Nav() {
             <Link
               key={item.label}
               href={item.href}
+              aria-current={isActive(item.href) ? 'page' : undefined}
               className={isActive(item.href) ? 'mobilelink active' : 'mobilelink'}
               onClick={() => setOpen(false)}
             >

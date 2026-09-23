@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Loader2, MessageCircle, Send, Star } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/lib/useSession';
@@ -84,8 +85,8 @@ export default function CommunitySection() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!message.trim() || sending) return;
-    if (!user || !eligible) { setError('You are not an algo subscriber. Only verified algorithm users can add comments and reviews.'); return; }
-    if (!supabase) { setError('Add your Supabase public keys to enable live posting.'); return; }
+    if (!user || !eligible) { setError('Reviews and replies are available to verified TCT Algo subscribers.'); return; }
+    if (!supabase) { setError('Community posting is temporarily unavailable. Please try again later.'); return; }
     setSending(true); setError('');
     const { data, error } = await supabase.from('community_comments').insert({ user_id: user.id, author_name: 'Verified member', body: message.trim(), rating: replyTo ? null : rating, parent_id: replyTo }).select().single();
     if (error) setError('Unable to post. Check your verified subscription and wait 30 seconds between posts.');
@@ -112,7 +113,10 @@ export default function CommunitySection() {
       </div>
       <aside className="community-form card">
         <div className="community-form-heading"><span className="live-dot" />LIVE COMMUNITY</div><h3>{replyTo ? 'Write a reply' : 'Rate your experience'}</h3><p>{replyTo ? 'Keep the discussion useful and respectful.' : 'Your feedback helps shape what we build next.'}</p>
-        {loading || checking ? <p role="status">Checking posting access…</p> : !eligible ? <p role="status">You are not an algo subscriber. Only verified algorithm users can add comments and reviews.</p> : <form onSubmit={submit}>
+        {loading || checking ? <p role="status">Checking posting access…</p> : !eligible ? <>
+          <p>Everyone can read the conversation. Reviews and replies are available to verified TCT Algo subscribers.</p>
+          <Link className="btn ghost" href={user ? '/contact' : '/login'}>{user ? 'Ask about subscriber access' : 'Log in to check your access'}</Link>
+        </> : <form onSubmit={submit}>
           <p className="footnote">Posts use your registered name.</p>
           {!replyTo && <><label>Your rating</label><Stars rating={rating} interactive onChange={setRating} /></>}
           <label htmlFor="community-message">{replyTo ? 'Your reply' : 'Your review'}</label><textarea id="community-message" className="input community-textarea" value={message} onChange={(event) => setMessage(event.target.value)} maxLength={600} placeholder={replyTo ? 'Add to the conversation…' : 'What has your experience been like?'} required />
