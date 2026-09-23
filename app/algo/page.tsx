@@ -40,7 +40,7 @@ export default function TCTAlgoPage() {
   };
 
   return (
-    <div className="p-6 md:p-12 max-w-7xl mx-auto space-y-20 text-gray-900">
+    <main className="product-page p-6 md:p-12 max-w-7xl mx-auto space-y-20 bg-gray-50 text-gray-900">
       
       {/* Header */}
       <div className="text-center space-y-4 max-w-3xl mx-auto">
@@ -49,7 +49,7 @@ export default function TCTAlgoPage() {
         </span>
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">Three Paths to Automated Trading</h1>
         <p className="text-gray-600 text-lg">
-          Whether you want to manage your own entries, wait for automated system detection, or turn your custom strategy into code—The Corporate Trader provides the ideal solution.
+          Manage trades on MT5, explore upcoming automation, or turn your own strategy rules into a custom algorithm.
         </p>
       </div>
 
@@ -528,6 +528,6 @@ export default function TCTAlgoPage() {
         </div>
       </section>
 
-    </div>
+    </main>
   );
 }
