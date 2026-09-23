@@ -1,13 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Menu, X, ChevronDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Menu, X, ChevronDown, User } from "lucide-react";
+// Import your auth client if using Supabase directly, e.g.:
+// import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 export function Nav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [productsOpen, setProductsOpen] = useState(false);
   const [learnOpen, setLearnOpen] = useState(false);
+  
+  // State for logged-in user simulation / integration
+  const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
+
+  useEffect(() => {
+    // Example: Fetch current user session if using Supabase or local auth state
+    // const supabase = createClientComponentClient();
+    // supabase.auth.getUser().then(({ data: { user } }) => {
+    //   if (user) setUser({ email: user.email, name: user.user_metadata?.full_name || user.email });
+    // });
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
@@ -25,7 +38,7 @@ export function Nav() {
           </Link>
 
           {/* Products Dropdown */}
-          <div className="relative" onMouseLeave={() => setProductsOpen(false)}>
+          <div className="relative py-2" onMouseLeave={() => setProductsOpen(false)}>
             <button
               onMouseEnter={() => setProductsOpen(true)}
               onClick={() => setProductsOpen(!productsOpen)}
@@ -34,7 +47,7 @@ export function Nav() {
               Products <ChevronDown className="w-4 h-4" />
             </button>
             {productsOpen && (
-              <div className="absolute top-full left-0 w-56 bg-card border border-border shadow-lg rounded-md py-2 mt-1 z-50">
+              <div className="absolute top-full left-0 w-56 bg-card border border-border shadow-lg rounded-md py-2 z-50">
                 <Link
                   href="/algo"
                   className="block px-4 py-2 text-sm hover:bg-muted transition-colors"
@@ -58,7 +71,7 @@ export function Nav() {
           </div>
 
           {/* Learn Dropdown */}
-          <div className="relative" onMouseLeave={() => setLearnOpen(false)}>
+          <div className="relative py-2" onMouseLeave={() => setLearnOpen(false)}>
             <button
               onMouseEnter={() => setLearnOpen(true)}
               onClick={() => setLearnOpen(!learnOpen)}
@@ -67,7 +80,7 @@ export function Nav() {
               Learn <ChevronDown className="w-4 h-4" />
             </button>
             {learnOpen && (
-              <div className="absolute top-full left-0 w-56 bg-card border border-border shadow-lg rounded-md py-2 mt-1 z-50">
+              <div className="absolute top-full left-0 w-56 bg-card border border-border shadow-lg rounded-md py-2 z-50">
                 <Link
                   href="/strategies"
                   className="block px-4 py-2 text-sm hover:bg-muted transition-colors"
@@ -96,11 +109,13 @@ export function Nav() {
             )}
           </div>
 
-          <Link href="/market-watch" className="text-sm font-medium hover:text-primary transition-colors">
+          {/* Fixed Route: Market Watch */}
+          <Link href="/markets" className="text-sm font-medium hover:text-primary transition-colors">
             Market Watch
           </Link>
           
-          <Link href="/support" className="text-sm font-medium hover:text-primary transition-colors">
+          {/* Fixed Route: Support (pointing to /help or /support page) */}
+          <Link href="/help" className="text-sm font-medium hover:text-primary transition-colors">
             Support
           </Link>
         </nav>
@@ -113,12 +128,24 @@ export function Nav() {
           >
             Account
           </Link>
-          <Link
-            href="/login"
-            className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium shadow hover:bg-primary/90 transition-colors"
-          >
-            Login / Sign Up
-          </Link>
+
+          {/* Dynamic Auth Button / User Profile */}
+          {user ? (
+            <Link
+              href="/account"
+              className="inline-flex items-center gap-2 rounded-md bg-muted px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+            >
+              <User className="w-4 h-4" />
+              <span>{user.name || "My Account"}</span>
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium shadow hover:bg-primary/90 transition-colors"
+            >
+              Login / Sign Up
+            </Link>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -160,7 +187,7 @@ export function Nav() {
           </div>
 
           <Link
-            href="/market-watch"
+            href="/markets"
             onClick={() => setMobileMenuOpen(false)}
             className="block text-base font-medium py-1"
           >
@@ -168,7 +195,7 @@ export function Nav() {
           </Link>
 
           <Link
-            href="/support"
+            href="/help"
             onClick={() => setMobileMenuOpen(false)}
             className="block text-base font-medium py-1"
           >
@@ -184,13 +211,24 @@ export function Nav() {
           </Link>
 
           <div className="pt-2">
-            <Link
-              href="/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full text-center inline-block rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium shadow hover:bg-primary/90"
-            >
-              Login / Sign Up
-            </Link>
+            {user ? (
+              <Link
+                href="/account"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-center inline-flex items-center justify-center gap-2 rounded-md bg-muted px-4 py-2 text-sm font-medium"
+              >
+                <User className="w-4 h-4" />
+                <span>{user.name || "My Account"}</span>
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-center inline-block rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium shadow hover:bg-primary/90"
+              >
+                Login / Sign Up
+              </Link>
+            )}
           </div>
         </div>
       )}
