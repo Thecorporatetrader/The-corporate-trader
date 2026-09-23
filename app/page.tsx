@@ -20,9 +20,8 @@ export default function Home() {
           become <span className="text-cyan">disciplined professionals.</span>
         </h1>
         <p className="reveal-up reveal-delay-2">
-          A focused trading technology ecosystem combining a private AI-configured trading
-          journal, MT5 automation, customised algos for every market, trading education, and
-          practical market knowledge.
+          Build a more disciplined trading routine with a private trading journal,
+          MT5 automation, custom algorithms, and practical market education.
         </p>
         <div className="actions reveal-up reveal-delay-3">
           <Link className="btn primary" href="/journal">
@@ -47,19 +46,16 @@ export default function Home() {
             <h2>Built by traders, for disciplined traders.</h2>
           </div>
           <p>
-            The Corporate Trader (TCT) is a trading technology and education institute helping
-            traders build a structured, disciplined approach to the markets. Through trading
-            journals, algorithmic tools, and practical education, we support better decisions,
-            risk awareness, and continuous improvement. We don&apos;t sell signals or promise
-            guaranteed profits — our focus is on process over guesswork.
+            The Corporate Trader (TCT) brings together trading tools and practical education
+            to help you plan, manage risk, and learn from every trade. We don&apos;t sell signals
+            or promise guaranteed profits. Our focus is a consistent, informed process.
           </p>
         </div>
         <div className="card">
           <p style={{ margin: 0 }}>
-            The Corporate Trader combines three things that act together:
-            automated execution on MT5, a trade-tracking system that actually tells you why a
-            trade worked or didn&apos;t, and practical education behind both. Everything we build
-            is designed around one principle — <b>process over promises</b>.
+            Set your rules, track your decisions, and review your progress. Our MT5 tools,
+            trading journal, and learning resources support each step, with one guiding
+            principle: <b>process over promises</b>.
           </p>
         </div>
       </section>
@@ -74,13 +70,13 @@ export default function Home() {
             <h2>Four ways we help you trade better.</h2>
           </div>
           <p>
-            Start with our own algo, get one built to your rules, track every trade with a real
-            rating system, or learn the market structure behind all of it.
+            Explore MT5 tools, turn your own rules into an algorithm, review your trades,
+            or build your knowledge with free learning resources.
           </p>
         </div>
         <div className="grid-4">
           {products.map(({ icon: Icon, title, text, href, tag }) => (
-            <Link className="card" href={href} key={title}>
+            <Link className="card product-card" href={href} key={title}>
               <Icon className="icon" />
               <div className="pill" style={{ display: 'inline-block', marginTop: 16 }}>
                 {tag}
