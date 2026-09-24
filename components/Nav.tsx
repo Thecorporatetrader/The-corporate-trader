@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Bot, BookOpen, Smartphone, Settings2, Menu, X } from 'lucide-react';
@@ -11,10 +12,7 @@ import { GoogleIcon } from './GoogleIcon';
 /** Site links stay in the navigation row; account actions sit beside the brand. */
 export const navItems = [
   { label: 'Home', href: '/' },
-  { label: 'Famous Strategies', href: '/#famous-strategies' },
-  { label: 'Library', href: '/library' },
   { label: 'Market Watch', href: '/post' },
-  { label: 'Articles', href: '/articles' },
 ] as const;
 
 export const helpItem = { label: 'Help', href: '/help' };
@@ -27,13 +25,19 @@ const productItems = [
   { label: 'Build Your Own Algo', href: '/algo#custom-algo-section', description: 'Turn your strategy rules into automation', icon: Settings2 },
 ];
 
-function ProductsMenu({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
+const learnItems = [
+  { label: 'Library', href: '/library', description: 'Build your knowledge with free resources', icon: BookOpen },
+  { label: 'Famous Strategies', href: '/#famous-strategies', description: 'Explore approaches from well-known traders', icon: Bot },
+  { label: 'Articles', href: '/articles', description: 'Practical insights for a disciplined process', icon: BookOpen },
+];
+
+function NavDropdown({ title, items, mobile = false, onNavigate }: { title: string; items: typeof productItems; mobile?: boolean; onNavigate?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
-  const active = productItems.some((item) => item.href === pathname);
-  const panelId = mobile ? 'mobile-products' : 'desktop-products';
+  const active = items.some((item) => item.href === pathname);
+  const panelId = `${mobile ? 'mobile' : 'desktop'}-${title.toLowerCase()}`;
 
   useEffect(() => { setExpanded(false); }, [pathname]);
   useEffect(() => {
@@ -59,10 +63,10 @@ function ProductsMenu({ mobile = false, onNavigate }: { mobile?: boolean; onNavi
     }}>
     <button ref={trigger} type="button" className={active ? 'products-trigger active' : 'products-trigger'}
       aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded((value) => !value)}>
-      Products <ChevronDown size={16} aria-hidden="true" />
+      {title} <ChevronDown size={16} aria-hidden="true" />
     </button>
     <div id={panelId} className="products-panel" hidden={!expanded}>
-      {productItems.map(({ label, href, description, icon: Icon }) => <Link key={href} href={href}
+      {items.map(({ label, href, description, icon: Icon }) => <Link key={href} href={href}
         className="product-nav-link" aria-current={href === pathname ? 'page' : undefined}
         onClick={() => { setExpanded(false); onNavigate?.(); }}>
         <Icon size={20} aria-hidden="true" />
@@ -155,6 +159,16 @@ export function Nav() {
   return (
     <nav className="nav" id="top" aria-label="Main navigation">
       <style>{`
+        .nav-brand { display: flex; align-items: center; gap: 12px; }
+        .nav-logo { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; object-fit: contain; }
+        .nav-brand-copy { min-width: 0; }
+        .nav-brand .brand { display: block; }
+        @media (max-width: 540px) {
+          .nav-brand { gap: 9px; }
+          .nav-logo { width: 44px; height: 44px; }
+          .nav-brand .brand { font-size: 12px; letter-spacing: .04em; }
+          .nav-brand .brandtagline { font-size: 9px; letter-spacing: 0; }
+        }
         .products-menu { position: relative; }
         .products-trigger { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 0; color: #a9bdcf; background: transparent; border: 0; cursor: pointer; font: inherit; }
         .products-trigger:hover, .products-trigger.active, .products-trigger[aria-expanded="true"] { color: #00f0ff; }
@@ -186,10 +200,13 @@ export function Nav() {
       <div className="container navin">
         <div className="navtop">
           <div className="brandblock">
-            <Link className="brand" href="/" aria-label="The Corporate Trader — home">
-              THE CORPORATE <span>TRADER</span>
+            <Link className="nav-brand" href="/" aria-label="The Corporate Trader — home">
+              <Image className="nav-logo" src="/images/tct-logo.png" alt="" width={64} height={64} sizes="(max-width: 540px) 44px, 64px" priority />
+              <span className="nav-brand-copy">
+                <span className="brand">THE CORPORATE <span>TRADER</span></span>
+                <span className="brandtagline" style={{ display: 'block' }}>Trade. Track. Improve. Automate.</span>
+              </span>
             </Link>
-            <p className="brandtagline">Trade. Track. Improve. Automate.</p>
           </div>
           <div className="account-actions" aria-label="Account">
             {!loading && !user && <>
@@ -218,7 +235,8 @@ export function Nav() {
         {/* Desktop links */}
         <div className="links">
           <Link href="/" className={isActive('/') ? 'navlink active' : 'navlink'} aria-current={isActive('/') ? 'page' : undefined}>Home</Link>
-          <ProductsMenu />
+          <NavDropdown title="Products" items={productItems} />
+          <NavDropdown title="Learn" items={learnItems} />
           {navItems.slice(1).map((item) => (
             <Link
               key={item.label}
@@ -258,7 +276,10 @@ export function Nav() {
       >
         <div className="mobilemenu-inner">
           <Link href="/" className={isActive('/') ? 'mobilelink active' : 'mobilelink'} onClick={() => setOpen(false)}>Home</Link>
-          {open && <ProductsMenu mobile onNavigate={() => setOpen(false)} />}
+          {open && <>
+            <NavDropdown title="Products" items={productItems} mobile onNavigate={() => setOpen(false)} />
+            <NavDropdown title="Learn" items={learnItems} mobile onNavigate={() => setOpen(false)} />
+          </>}
           {navItems.slice(1).map((item) => (
             <Link
               key={item.label}
