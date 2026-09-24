@@ -1,25 +1,22 @@
+import Link from 'next/link';
+import type { Metadata } from 'next';
 import { PageHero } from '@/components/Site';
-import { articles, moreArticles } from '@/lib/data';
+
+export const metadata: Metadata = {
+  title: 'Articles — The Corporate Trader',
+  robots: { index: false, follow: true },
+};
 
 export default function Page() {
-  const all = [...articles, ...moreArticles];
-
   return (
     <main>
-      <PageHero kicker="TCT INSIGHTS" title="Articles">
-        Original educational content from The Corporate Trader covering trading process,
-        liquidity, risk and automation.
+      <PageHero kicker="THE CORPORATE TRADER" title="Articles">
+        We haven’t published any articles yet. You can explore the learning resources in our library.
       </PageHero>
       <section className="container">
-        <div className="grid">
-          {all.map((a) => (
-            <article className="card" key={a.title}>
-              <span className="pill">{a.category}</span>
-              <h3>{a.title}</h3>
-              <p>{a.description}</p>
-              <span className="good">Read article →</span>
-            </article>
-          ))}
+        <div className="actions">
+          <Link className="btn primary" href="/library">Explore the Library</Link>
+          <Link className="btn ghost" href="/">Back to Home</Link>
         </div>
       </section>
     </main>
