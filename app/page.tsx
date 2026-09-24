@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, BookOpen } from '@/components/Site';
+import { ArrowRight } from '@/components/Site';
 import CommunitySection from '@/components/CommunitySection';
 import MarketTicker from '@/components/MarketTicker';
-import { products, articles, famousStrategies } from '@/lib/data';
+import { products, famousStrategies } from '@/lib/data';
 
 export default function Home() {
   return (
@@ -60,8 +60,6 @@ export default function Home() {
         </div>
       </section>
 
-      <CommunitySection />
-
       {/* WHAT WE PROVIDE */}
       <section className="container">
         <div className="sectionhead">
@@ -88,6 +86,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <CommunitySection />
 
       {/* FAMOUS STRATEGIES — linked from the main navigation */}
       <section className="container" id="famous-strategies">
@@ -121,25 +121,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="container">
-        <div className="sectionhead">
-          <div>
-            <div className="eyebrow">LATEST FROM TCT</div>
-            <h2>Articles &amp; insights.</h2>
-          </div>
-          <Link href="/articles">View all →</Link>
-        </div>
-        <div className="grid">
-          {articles.map((a) => (
-            <div className="card" key={a.title}>
-              <BookOpen className="icon" />
-              <span className="pill">{a.category}</span>
-              <h3>{a.title}</h3>
-              <p>{a.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+
 
       <section className="container">
         <div className="card upcoming-algo">
