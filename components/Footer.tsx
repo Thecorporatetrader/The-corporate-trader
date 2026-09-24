@@ -14,14 +14,12 @@ const exploreLinks: FooterLink[] = [
   { label: 'Homepage', href: '/' },
   { label: 'Trading Journal', href: '/journal' },
   { label: 'TCT Algo', href: '/algo' },
-  { label: 'TCT Strategies & Indicators', href: '/strategies' },
   { label: 'Famous Strategies', href: '/#famous-strategies' },
   { label: 'Liquidity Strategy', href: '/liquidity' },
 ];
 
 const resourceLinks: FooterLink[] = [
   { label: 'Library', href: '/library' },
-  { label: 'Articles', href: '/articles' },
   { label: 'Market Watch', href: '/post' },
   { label: 'Help', href: '/help' },
   { label: 'FAQ', href: '/faq' },

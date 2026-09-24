@@ -20,7 +20,6 @@ export const helpItem = { label: 'Help', href: '/help' };
 
 const productItems = [
   { label: 'TCT Algo', href: '/algo', description: 'Rule-based trade management for MT5', icon: Bot },
-  { label: 'Strategies & Indicators', href: '/strategies', description: 'Explore tools for your trading process', icon: BookOpen },
   { label: 'Trading Journal', href: '/journal', description: 'Track, review, and learn from your trades', icon: Smartphone },
   { label: 'Build Your Own Algo', href: '/algo#custom-algo-section', description: 'Turn your strategy rules into automation', icon: Settings2 },
 ];
@@ -28,7 +27,6 @@ const productItems = [
 const learnItems = [
   { label: 'Library', href: '/library', description: 'Build your knowledge with free resources', icon: BookOpen },
   { label: 'Famous Strategies', href: '/#famous-strategies', description: 'Explore approaches from well-known traders', icon: Bot },
-  { label: 'Articles', href: '/articles', description: 'Practical insights for a disciplined process', icon: BookOpen },
 ];
 
 function NavDropdown({ title, items, mobile = false, onNavigate }: { title: string; items: typeof productItems; mobile?: boolean; onNavigate?: () => void }) {
