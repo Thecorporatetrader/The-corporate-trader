@@ -23,6 +23,7 @@ const resourceLinks: FooterLink[] = [
   { label: 'Market Watch', href: '/post' },
   { label: 'Help', href: '/help' },
   { label: 'FAQ', href: '/faq' },
+  { label: 'Privacy Policy', href: '/privacy-policy' },
   { label: 'Liquidity Algo', href: '/liquidity-algo' },
 ];
 
