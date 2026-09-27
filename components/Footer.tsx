@@ -24,6 +24,7 @@ const resourceLinks: FooterLink[] = [
   { label: 'Help', href: '/help' },
   { label: 'FAQ', href: '/faq' },
   { label: 'Privacy Policy', href: '/privacy-policy' },
+  { label: 'Delete Account', href: '/delete-account' },
   { label: 'Liquidity Algo', href: '/liquidity-algo' },
 ];
 
