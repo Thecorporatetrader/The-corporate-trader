@@ -1,5 +1,5 @@
 import Link from 'next/link';
-
+import Image from 'next/image';
 import { ArrowRight } from '@/components/Site';
 import CommunitySection from '@/components/CommunitySection';
 import MarketTicker from '@/components/MarketTicker';
@@ -31,11 +31,10 @@ export default function Home() {
             Explore TCT Algo
           </Link>
         </div></div>
-        <div className="home-tools">
-          <h2>Tools for your trading routine</h2>
-          <Link href="/algo">MT5 algorithms <small>Compare Quant, Scalp and trader-directed Algo.</small></Link>
-          <Link href="/journal">Trading journal <small>Record trades and review your decisions.</small></Link>
-          <Link href="/library">Learning library <small>Read practical guides to markets and risk.</small></Link>
+        <div className="hero-comparison-image">
+          <Image src="/images/disciplined-vs-reactive.png" width={1037} height={565}
+            alt="Disciplined System: Rules, Risk, Review. Reactive Trading: Chase, Doubt, Reset."
+            priority unoptimized sizes="(max-width: 850px) 92vw, 56vw" />
         </div>
       </header>
 

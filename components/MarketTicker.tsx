@@ -25,7 +25,7 @@ function TickerTape({ items }: { items: typeof symbols }) {
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
     script.async = true;
-    script.textContent = JSON.stringify({ symbols: items, showSymbolLogo: false, isTransparent: true, displayMode: 'regular', colorTheme: 'light', locale: 'en', largeChartUrl: `${window.location.origin}/markets` });
+    script.textContent = JSON.stringify({ symbols: items, showSymbolLogo: false, isTransparent: true, displayMode: 'regular', colorTheme: 'dark', locale: 'en', largeChartUrl: `${window.location.origin}/markets` });
     mount.appendChild(script);
     return () => mount.remove();
   }, [items]);

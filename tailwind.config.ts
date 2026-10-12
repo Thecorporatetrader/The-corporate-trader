@@ -5,16 +5,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#ffffff',
-        panel: '#ffffff',
-        panel2: '#f5f7f9',
-        text: '#202b36',
-        muted: '#596b7b',
-        cyan: '#225d8e',
-        green: '#217449',
-        red: '#b6324a',
-        warn: '#946414',
-        line: '#dce2e7',
+        bg: '#070b12',
+        panel: '#0e1520',
+        panel2: '#121c29',
+        text: '#eef6ff',
+        muted: '#8fa3b8',
+        cyan: '#00e5ff',
+        green: '#00d084',
+        red: '#ff4d6d',
+        warn: '#ffcc66',
+        line: '#1e3042',
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
