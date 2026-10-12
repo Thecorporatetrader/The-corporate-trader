@@ -7,7 +7,7 @@ import './suite.css';
 
 export const metadata: Metadata = { title: 'Our Algorithms | TCT Quant, Scalp & Algo', description: 'Explore three MT5 workflows, historical backtest summaries and transparent lot-size risk illustrations from The Corporate Trader.' };
 const faqs = [
-  ['How do the three algorithms differ?', 'TCT Quant uses a daily, weekly and monthly breakout/fakeout approach. TCT Scalp automates an M1/M5 workflow. TCT Algo leaves entry-level selection to you and automates configured execution and position management.'],
+  ['How do the three algorithms differ?', 'TCT Quant monitors the market and automates entries and position management while MT5 is connected. Your setup can run 24/7; trades depend on available market sessions. TCT Scalp automates an M1/M5 workflow. TCT Algo leaves entry-level selection to you and automates configured execution and position management.'],
   ['Are the results live or guaranteed?', 'They are historical MT5 Strategy Tester results for 1 January–11 October 2026, starting at $500 with fixed 0.01 lot. Backtests use historical conditions and assumptions; they do not establish future returns. You can lose capital.'],
   ['Can I multiply the lot size on a $500 account?', 'The calculator shows arithmetic, not account feasibility. A larger lot can increase losses and margin requirements and cause a stop-out. A new test with realistic broker conditions and margin modelling is needed to assess a different setup.'],
   ['Why is there no TCT Algo performance figure?', 'No corresponding backtest was supplied for this trader-directed product. Outcomes depend on the entry decisions and settings chosen by its user. We do not assign Quant or Scalp results to it.'],
