@@ -19,7 +19,7 @@ export const helpItem = { label: 'Help', href: '/help' };
 
 
 const productItems = [
-  { label: 'TCT Algo', href: '/algo', description: 'Rule-based trade management for MT5', icon: Bot },
+  { label: 'Our Algorithms', href: '/algo', description: 'Explore TCT Quant, TCT Scalp and TCT Algo', icon: Bot },
   { label: 'Trading Journal', href: '/journal', description: 'Track, review, and learn from your trades', icon: Smartphone },
   { label: 'Build Your Own Algo', href: '/algo#custom-algo-section', description: 'Turn your strategy rules into automation', icon: Settings2 },
 ];

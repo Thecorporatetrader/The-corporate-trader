@@ -13,7 +13,7 @@ interface FooterLink {
 const exploreLinks: FooterLink[] = [
   { label: 'Homepage', href: '/' },
   { label: 'Trading Journal', href: '/journal' },
-  { label: 'TCT Algo', href: '/algo' },
+  { label: 'Our Algorithms', href: '/algo' },
   { label: 'Famous Strategies', href: '/#famous-strategies' },
   { label: 'Liquidity Strategy', href: '/liquidity' },
 ];
