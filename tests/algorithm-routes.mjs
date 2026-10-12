@@ -1,4 +1,4 @@
-const origin = 'http://127.0.0.1:3001';
+const origin = process.env.TEST_ORIGIN || 'http://127.0.0.1:3001';
 const pages = ['/algo','/algo/results/quant','/algo/results/scalp','/algo/results/algo'];
 const links = new Set();
 for (const path of pages) {
@@ -20,4 +20,3 @@ for(const target of links){
 const missing = await fetch(origin+'/algo/results/not-a-product');
 if(missing.status !==404) throw new Error('Unknown products must return 404');
 console.log(`PASS: ${pages.length} pages, ${links.size} local routes/assets, anchors, privacy checks, unknown-product 404.`);
-

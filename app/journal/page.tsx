@@ -6,7 +6,7 @@ import React from 'react';
 export default function JournalPage() {
   return (
     <main className="product-page p-6 md:p-12 max-w-6xl mx-auto space-y-16 bg-gray-50 text-gray-900">
-      
+
       {/* Header Section */}
       <div className="text-center space-y-4">
         <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
@@ -19,7 +19,7 @@ export default function JournalPage() {
       </div>
 
       {/* Google Play Store Banner */}
-      <div className="bg-gradient-to-r from-gray-900 via-indigo-950 to-blue-950 text-white p-8 md:p-12 rounded-3xl shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8 border border-blue-900/50">
+      <div className="bg-white text-gray-900 p-8 md:p-12 rounded-3xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-8 border border-gray-200">
         <div className="space-y-3 text-center md:text-left">
           <div className="inline-block bg-blue-600 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
             Android App Release
@@ -30,13 +30,13 @@ export default function JournalPage() {
           </p>
         </div>
         <div className="flex flex-col items-center gap-2">
-          <div className="px-6 py-4 bg-gray-900 text-gray-200 font-medium rounded-2xl border border-gray-700 shadow-xl flex items-center gap-4 hover:border-blue-500 transition cursor-not-allowed">
+          <div className="px-6 py-4 bg-gray-100 text-gray-700 font-medium rounded-2xl border border-gray-700 shadow-xl flex items-center gap-4 hover:border-blue-500 transition cursor-not-allowed">
             <svg className="w-8 h-8 fill-blue-500" viewBox="0 0 24 24">
               <path d="M3.609 1.814L13.792 12 3.61 22.186a1.5 1.5 0 0 1-2.454-1.145V2.959a1.5 1.5 0 0 1 2.453-1.145zM15.207 13.414l2.293 2.293-11.5 6.635a1.5 1.5 0 0 0 2.212 1.312l11.085-6.398-4.09-4.842zm0-2.828L19.3 5.744a1.5 1.5 0 0 0-2.213-1.312l-11.085 6.398 4.09 4.842 5.115-5.258z" />
             </svg>
             <div className="text-left">
               <div className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold">Google Play Store</div>
-              <div className="text-lg font-bold tracking-tight text-white">Coming Soon</div>
+              <div className="text-lg font-bold tracking-tight text-gray-900">Coming Soon</div>
             </div>
           </div>
         </div>
@@ -50,7 +50,7 @@ export default function JournalPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
+
           {/* Card 1: Core Metrics */}
           <div className="bg-white p-6 rounded-2xl border shadow-sm space-y-4 hover:shadow-md transition">
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">📊</div>

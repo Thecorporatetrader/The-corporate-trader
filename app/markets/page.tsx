@@ -37,7 +37,7 @@ export default function MarketsPage() {
     script.async = true;
     script.textContent = JSON.stringify({
       autosize: true, symbol, interval: '60', timezone: 'Asia/Kolkata',
-      theme: 'dark', style: '1', locale: 'en', allow_symbol_change: false,
+      theme: 'light', style: '1', locale: 'en', allow_symbol_change: false,
       hide_side_toolbar: false, calendar: false, support_host: 'https://www.tradingview.com',
     });
     script.onerror = () => setFailed(true);

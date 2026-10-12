@@ -876,3 +876,18 @@ a.card:hover { border-color: #3a7185; }
   .product-page h1 { font-size: 32px; }
   .product-page h2 { font-size: 26px; }
 }
+/* Site-wide light surfaces, retaining the existing layout and navigation. */
+body{background:#fff;background-image:none;color:#202b36}
+.nav{background:rgba(255,255,255,.97);border-bottom:1px solid #dce2e7;backdrop-filter:none}
+.nav .products-panel{background:#fff;border-color:#dce2e7;box-shadow:0 8px 24px #22334412}
+.nav .product-nav-link strong{color:#20384c}.nav .product-nav-link small{color:#5a6c7a}.nav .product-nav-link:hover,.nav .product-nav-link:focus-visible{background:#f2f6fa}
+.nav .product-nav-link>svg{color:#225d8e}.navtoggle,.mobilemenu.open{background:#fff;color:#20384c}.brandtagline{color:#667788}
+.card,.herocta,.notice,.success-dialog{background:#f8fafb;color:#202b36;border-color:#dce2e7;box-shadow:none}
+.btn.primary{background:#225d8e;color:white;border-color:#225d8e}.btn.ghost{background:#fff;color:#225d8e;border-color:#b9c9d5}
+.input{background:#fff;color:#202b36;border-color:#bdc8d0}.input::placeholder{color:#6c7b86}
+.sitefooter{background:#f4f6f8;color:#526373;border-color:#dce2e7}.sitefooter h3,.sitefooter .footbrand h3,.sitefooter a{color:#203e57}.sitefooter .footcol,.sitefooter .footbar{border-color:#dce2e7}.sitefooter .totop,.sitefooter .sociallink{background:white;color:#225d8e;border-color:#dce2e7}
+.hero-orb{display:none}.hero-visual{background:#f5f8fa;box-shadow:none;border-color:#dce2e7}.market-watch{background:#f5f7f9;border-color:#dce2e7}.market-watch-label{color:#475d70}
+.community-form label,.review-text,.review-name{color:#344c60}.community-form-heading,.reply-button{color:#225d8e}.community-error{color:#aa243c!important}
+.nav .products-trigger{color:#455d70}.nav .products-trigger[aria-expanded="true"],.nav .products-trigger.active{color:#225d8e}
+.reveal-up{opacity:1!important;transform:none!important;animation:none!important}.eyebrow{color:#526a80}.hero h1{font-size:clamp(34px,4vw,54px);line-height:1.12;letter-spacing:-.025em}.hero p{font-size:17px}
+.home-tools{border:1px solid #dce2e7;padding:30px;background:#f8fafb;border-radius:6px}.home-tools h2{font-size:23px;margin:0 0 20px}.home-tools a{display:block;padding:17px 0;border-top:1px solid #dce2e7;font-weight:600;color:#225d8e}.home-tools small{display:block;color:#5c6b78;font-weight:400;margin-top:5px}
