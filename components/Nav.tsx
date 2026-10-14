@@ -25,6 +25,7 @@ const productItems = [
 ];
 
 const learnItems = [
+  { label: 'Know Your Inner Trader', href: '/know-your-inner-trader', description: 'Discover your habits with a free self-assessment', icon: BookOpen },
   { label: 'Library', href: '/library', description: 'Build your knowledge with free resources', icon: BookOpen },
   { label: 'Famous Strategies', href: '/#famous-strategies', description: 'Explore approaches from well-known traders', icon: Bot },
 ];

@@ -40,6 +40,12 @@ export default function Home() {
 
       {/* WHO WE ARE */}
       <section className="container">
+        <div className="card assessment-promo">
+          <div><div className="eyebrow">FREE · 10 QUESTIONS · NO LOGIN</div><h2>Know Your Inner Trader</h2><p>Understand your trading habits and turn self-awareness into a more disciplined routine.</p></div>
+          <Link className="btn primary" href="/know-your-inner-trader">Take the Self-Assessment <ArrowRight size={17} /></Link>
+        </div>
+      </section>
+      <section className="container">
         <div className="sectionhead">
           <div>
             <div className="eyebrow">WHO WE ARE</div>

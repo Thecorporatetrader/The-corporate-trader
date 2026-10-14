@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { Nav, Footer } from '@/components/Site';
+import HelpAssistant from '@/components/HelpAssistant';
+import './trader-tools.css';
 
 export const metadata: Metadata = {
   title: 'The Corporate Trader',
@@ -15,6 +17,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <Nav />
         {children}
         <Footer />
+        <HelpAssistant />
       </body>
     </html>
   );

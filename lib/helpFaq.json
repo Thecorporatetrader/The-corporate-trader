@@ -1,0 +1,195 @@
+[
+  {
+    "questions": [
+      {
+        "answer": "The Corporate Trader is a platform focused on trading education, algorithms, indicators, and trading tools.",
+        "question": "What is The Corporate Trader?"
+      },
+      {
+        "answer": "Yes. We provide resources to help traders learn and develop their skills.",
+        "question": "Is The Corporate Trader suitable for beginners?"
+      },
+      {
+        "answer": "We provide trading algorithms, indicators, educational resources, trading journals, and other trading tools.",
+        "question": "What services do you offer?"
+      },
+      {
+        "answer": "No. Trading carries financial risk, and profits are never guaranteed.",
+        "question": "Do you guarantee trading profits?"
+      }
+    ],
+    "title": "About The Corporate Trader"
+  },
+  {
+    "questions": [
+      {
+        "answer": "TCT Algo is a free automated trading algorithm from The Corporate Trader.",
+        "question": "What is TCT Algo?"
+      },
+      {
+        "answer": "Yes. TCT Algo is completely free.",
+        "question": "Is TCT Algo free?"
+      },
+      {
+        "answer": "TCT Scalp is a trading algorithm designed for short-term trading opportunities.",
+        "question": "What is TCT Scalp?"
+      },
+      {
+        "answer": "Please connect with The Corporate Trader team for more information and access details.",
+        "question": "How can I access TCT Scalp?"
+      },
+      {
+        "answer": "TCT Fusion is our premium automated trading algorithm.",
+        "question": "What is TCT Fusion?"
+      },
+      {
+        "answer": "Please contact our team for current pricing, availability, and purchase information.",
+        "question": "How can I purchase TCT Fusion?"
+      },
+      {
+        "answer": "Yes. Automated trading involves financial risks, including the possibility of significant losses.",
+        "question": "Can trading algorithms lose money?"
+      },
+      {
+        "answer": "No. Historical performance and backtesting do not guarantee future trading results.",
+        "question": "Do your algorithms guarantee profits?"
+      }
+    ],
+    "title": "Trading Algorithms"
+  },
+  {
+    "questions": [
+      {
+        "answer": "Trading indicators are tools that help analyze price movements, trends, volatility, and market conditions.",
+        "question": "What are trading indicators?"
+      },
+      {
+        "answer": "It highlights potential buying and selling zones based on price action and market momentum.",
+        "question": "What is the Supply & Demand indicator?"
+      },
+      {
+        "answer": "EMA Angle measures changes in a moving average's slope to help evaluate directional momentum.",
+        "question": "What is EMA Angle?"
+      },
+      {
+        "answer": "TradingView-compatible indicators can be used on the platform when available.",
+        "question": "Can I use TCT indicators on TradingView?"
+      },
+      {
+        "answer": "Please check each indicator's product page or contact our team for availability information.",
+        "question": "Are your indicators free?"
+      },
+      {
+        "answer": "Yes! We plan to introduce more indicators to support technical analysis.",
+        "question": "Are more indicators coming soon?"
+      }
+    ],
+    "title": "Trading Indicators"
+  },
+  {
+    "questions": [
+      {
+        "answer": "It is a tool designed to help traders record, organize, and review their trading activities.",
+        "question": "What is the TCT Trading Journal?"
+      },
+      {
+        "answer": "A trading journal helps traders identify mistakes, evaluate strategies, and improve consistency.",
+        "question": "Why should I use a trading journal?"
+      },
+      {
+        "answer": "The journal is designed to help you record and analyze your trading outcomes.",
+        "question": "Can I track my wins and losses?"
+      },
+      {
+        "answer": "Please check our product page or contact the team for current availability.",
+        "question": "Is the Trading Journal free?"
+      },
+      {
+        "answer": "Yes. Trading journals can be useful for beginners and experienced traders.",
+        "question": "Can beginners use the Trading Journal?"
+      }
+    ],
+    "title": "Trading Journal"
+  },
+  {
+    "questions": [
+      {
+        "href": "/know-your-inner-trader",
+        "question": "What is Know Your Inner Trader?",
+        "answer": "It is a free, 10-question trading self-assessment designed to help you understand your trading habits and decision-making.",
+        "linkLabel": "Take the free assessment"
+      },
+      {
+        "answer": "Trading psychology helps traders understand how emotions influence their decisions.",
+        "question": "Why is trading psychology important?"
+      },
+      {
+        "answer": "Risk management involves controlling position sizes, exposure, and potential financial losses.",
+        "question": "What is risk management?"
+      },
+      {
+        "answer": "Backtesting evaluates a trading strategy using historical market data.",
+        "question": "What is backtesting?"
+      },
+      {
+        "answer": "No. Live trading results may differ from historical backtests.",
+        "question": "Does backtesting guarantee future profits?"
+      },
+      {
+        "answer": "XAUUSD represents gold priced in US dollars.",
+        "question": "What is XAUUSD?"
+      }
+    ],
+    "title": "Trading Education and Psychology"
+  },
+  {
+    "questions": [
+      {
+        "answer": "Yes! We are working on additional indicators to support technical analysis.",
+        "question": "Are new trading indicators coming soon?"
+      },
+      {
+        "answer": "We plan to introduce more algorithms as development and testing progress.",
+        "question": "Will new trading algorithms be launched?"
+      },
+      {
+        "answer": "We plan to improve our Trading Journal with additional tracking and analysis features.",
+        "question": "Are new Trading Journal features coming?"
+      },
+      {
+        "answer": "Yes. We aim to expand our collection of trading and educational tools.",
+        "question": "Will The Corporate Trader offer more trading tools?"
+      },
+      {
+        "answer": "Visit our website regularly for the latest product announcements and updates.",
+        "question": "How can I learn about upcoming launches?"
+      },
+      {
+        "answer": "Yes! Please contact our team and share your suggestions.",
+        "question": "Can I request a new feature?"
+      }
+    ],
+    "title": "Coming Soon"
+  },
+  {
+    "questions": [
+      {
+        "answer": "Click Sign Up on our website and follow the registration instructions.",
+        "question": "How do I create an account?"
+      },
+      {
+        "answer": "Visit the Products section and choose the tool or algorithm you are interested in.",
+        "question": "How can I access your products?"
+      },
+      {
+        "answer": "Please contact The Corporate Trader Support Team for assistance.",
+        "question": "How can I get installation support?"
+      },
+      {
+        "answer": "Please connect with our support team. We will be happy to assist you.",
+        "question": "What if my question is not listed?"
+      }
+    ],
+    "title": "Account and Support"
+  }
+]
