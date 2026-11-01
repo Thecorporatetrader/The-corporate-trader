@@ -1,15 +1,16 @@
 import type { Metadata } from 'next';
 import MarketTicker from '@/components/MarketTicker';
+import OptionsMatrix from '@/components/OptionsMatrix';
 
 /**
  * Replace app/post/page.tsx only. No extra packages, database migrations or keys.
  * Server-side public FRED CSV downloads; data is never fabricated.
+ * Includes real-time Delta Exchange Crypto Options Analytics & Market Structure Matrix.
  * The URL remains /post so existing links keep working.
- * To rename the shared navigation, separately change its Post label to Market Watch.
  */
 export const metadata: Metadata = {
   title: 'Market Watch — The Corporate Trader',
-  description: 'Explore US economic releases, growth, inflation, employment and the economic calendar.',
+  description: 'Explore US economic releases, growth, inflation, employment, options market structure and the economic calendar.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -61,11 +62,12 @@ const metrics: Metric[] = [
 ];
 
 const sections = [
-  ['us-data', '01', 'US Economic Data'],
-  ['growth', '02', 'GDP & Growth'],
-  ['inflation', '03', 'Inflation Dashboard'],
-  ['labour', '04', 'Labour Market'],
-  ['calendar', '05', 'Economic Calendar'],
+  ['options-matrix', '01', 'Options Matrix'],
+  ['us-data', '02', 'US Economic Data'],
+  ['growth', '03', 'GDP & Growth'],
+  ['inflation', '04', 'Inflation Dashboard'],
+  ['labour', '05', 'Labour Market'],
+  ['calendar', '06', 'Economic Calendar'],
 ] as const;
 
 function parseCSV(csv: string, series: string): Point[] {
@@ -102,7 +104,6 @@ async function readMetric(metric: Metric): Promise<Reading> {
   const url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?' +
     new URLSearchParams({ id: metric.id, cosd: start }).toString();
   try {
-    // No API keys, no browser CORS dependency, no stored copies of provider data.
     const response = await fetch(url, {
       cache: 'no-store',
       signal: AbortSignal.timeout(8000),
@@ -180,22 +181,31 @@ export default async function MarketWatchPage() {
   const available = readings.filter(r => r.points.length > 0).length;
   const checked = readings.find(r => r.checked)?.checked;
   const overview = ['A191RL1Q225SBEA', 'CPIAUCSL', 'UNRATE', 'PAYEMS'].map(id => readings.find(r => r.metric.id === id)!);
+  
   return <>
     <MarketTicker />
     <main className="tct-mw">
     <style>{styles}</style>
     <div className="mw-shell">
       <header className="mw-hero">
-        <div><p className="mw-kicker">THE CORPORATE TRADER / MACRO INTELLIGENCE</p>
+        <div>
+          <p className="mw-kicker">THE CORPORATE TRADER / MACRO INTELLIGENCE</p>
           <h1>Market <span>Watch.</span></h1>
-          <p className="mw-lead">Understand the economy behind the chart. Explore growth, inflation and employment before you form a market view.</p>
+          <p className="mw-lead">Understand the economy behind the chart. Explore growth, inflation, employment and derivatives market structure before you form a market view.</p>
         </div>
         <div className="mw-status"><span className="mw-dot" /> LATEST PUBLISHED DATA
           <p>{available} of {metrics.length} indicators available</p>
           <small>{checked ? 'Retrieved ' + new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(checked)) + ' IST' : 'Sources temporarily unavailable'}</small>
         </div>
       </header>
-      <nav className="mw-tabs" aria-label="Market Watch sections"><a href="#macro">Overview</a>{sections.map(([id, , title]) => <a key={id} href={'#' + id}>{title}</a>)}</nav>
+      
+      {/* Navigation tabs */}
+      <nav className="mw-tabs" aria-label="Market Watch sections">
+        <a href="#macro">Overview</a>
+        {sections.map(([id, , title]) => <a key={id} href={'#' + id}>{title}</a>)}
+      </nav>
+
+      {/* Macro Overview */}
       <section id="macro" className="mw-section">
         <div className="mw-heading"><div><p className="mw-kicker">THE BIG PICTURE</p><h2>Macro Dashboard</h2></div><span className="mw-badge">US ECONOMY</span></div>
         <div className="mw-overview">{overview.map(({ metric, points }) => {
@@ -205,8 +215,27 @@ export default async function MarketWatchPage() {
         <div className="mw-notice">Economic releases are periodic, not a live price feed. Each figure has its own observation date. Refresh this page to request updated data. Older or missing readings are flagged; no simulated values are used.</div>
         {available < metrics.length && <div className="mw-warning" role="status">Some sources could not be reached. Their explanations and source links remain available. Try refreshing later; unavailable does not mean zero.</div>}
       </section>
+
+      {/* 01 / Options Matrix Integration */}
+      <section id="options-matrix" className="mw-section">
+        <div className="mw-heading">
+          <div>
+            <p className="mw-kicker">01 / DERIVATIVES & VOLATILITY SURFACES</p>
+            <h2>Crypto Options Matrix</h2>
+          </div>
+          <span className="mw-badge">DELTA EXCHANGE INDIA LIVE</span>
+        </div>
+        <p className="mw-intro">
+          Real-time Open Interest distributions, Strike Put-Call Ratios (PCR), Volatility Walls, and Max Pain pinning strikes for BTC, ETH, and SOL contracts.
+        </p>
+        <div className="mb-6">
+          <OptionsMatrix initialAsset="BTC" />
+        </div>
+      </section>
+
+      {/* 02 / US Economic Data */}
       <section id="us-data" className="mw-section">
-        <div className="mw-heading"><div><p className="mw-kicker">01 / RELEASE MONITOR</p><h2>US Economic Data</h2></div><a className="mw-source" href="#calendar">See economic calendar ↓</a></div>
+        <div className="mw-heading"><div><p className="mw-kicker">02 / RELEASE MONITOR</p><h2>US Economic Data</h2></div><a className="mw-source" href="#calendar">See economic calendar ↓</a></div>
         <p className="mw-intro">Compare the latest available reading with its previous period. Select an indicator for its definition and history.</p>
         <div className="mw-table-scroll mw-panel" tabIndex={0} role="region" aria-label="US economic indicators">
           <table><caption>Latest observations, not a release-time forecast comparison</caption><thead><tr><th scope="col">Indicator</th><th scope="col">Latest</th><th scope="col">Previous period</th><th scope="col">Observation</th><th scope="col">Frequency</th></tr></thead><tbody>{readings.map(({ metric, points }) => {
@@ -216,13 +245,17 @@ export default async function MarketWatchPage() {
         </div>
         <p className="mw-meta">Consensus forecasts and surprise scores are not supplied by these series. The calendar may show forecasts where its provider has coverage. Directional price reactions are never guaranteed.</p>
       </section>
+
+      {/* 03, 04, 05 / Growth, Inflation, Labour */}
       {(['growth', 'inflation', 'labour'] as const).map((group, i) => <section id={group} className="mw-section" key={group}>
-        <div className="mw-heading"><div><p className="mw-kicker">0{i + 2} / {group === 'growth' ? 'ECONOMIC MOMENTUM' : group === 'inflation' ? 'PRICE PRESSURE' : 'JOBS & PARTICIPATION'}</p><h2>{group === 'growth' ? 'GDP & Growth' : group === 'inflation' ? 'Inflation Dashboard' : 'Labour Market'}</h2></div></div>
+        <div className="mw-heading"><div><p className="mw-kicker">0{i + 3} / {group === 'growth' ? 'ECONOMIC MOMENTUM' : group === 'inflation' ? 'PRICE PRESSURE' : 'JOBS & PARTICIPATION'}</p><h2>{group === 'growth' ? 'GDP & Growth' : group === 'inflation' ? 'Inflation Dashboard' : 'Labour Market'}</h2></div></div>
         <p className="mw-intro">{group === 'growth' ? 'Is activity expanding or slowing? Read real output alongside industrial activity.' : group === 'inflation' ? 'Distinguish headline price shocks from underlying inflation. Annual rates here are calculated from seasonally adjusted index levels.' : 'Connect hiring, unemployment, participation and new benefit claims to understand labour-market conditions.'}</p>
         <div className="mw-grid">{readings.filter(r => r.metric.group === group).map(reading => <Indicator key={reading.metric.id} reading={reading} />)}</div>
       </section>)}
+
+      {/* 06 / Calendar */}
       <section id="calendar" className="mw-section">
-        <div className="mw-heading"><div><p className="mw-kicker">05 / PLAN AHEAD</p><h2>Economic Calendar</h2></div><span className="mw-badge">THIRD-PARTY WIDGET</span></div>
+        <div className="mw-heading"><div><p className="mw-kicker">06 / PLAN AHEAD</p><h2>Economic Calendar</h2></div><span className="mw-badge">THIRD-PARTY WIDGET</span></div>
         <p className="mw-intro">Upcoming US releases, importance and available actual / forecast / previous readings. Check the timezone displayed inside the calendar before planning around an event.</p>
         <details className="mw-calendar mw-panel">
           <summary>Open economic calendar <span>Loads TradingView content</span></summary>
@@ -232,6 +265,8 @@ export default async function MarketWatchPage() {
         <p className="mw-meta">Calendar blank or blocked? <a className="mw-source" href="https://www.tradingview.com/economic-calendar/" target="_blank" rel="noopener noreferrer">Open the provider calendar ↗</a>. Verify important events against the official release schedules:</p>
         <div className="mw-links"><a href="https://www.bls.gov/schedule/" target="_blank" rel="noopener noreferrer">BLS schedule ↗</a><a href="https://www.bea.gov/news/schedule" target="_blank" rel="noopener noreferrer">BEA schedule ↗</a><a href="https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm" target="_blank" rel="noopener noreferrer">Federal Reserve meetings ↗</a></div>
       </section>
+
+      {/* Disclaimer and Methods */}
       <aside className="mw-method mw-panel">
         <h2>Read the data. Respect the uncertainty.</h2>
         <p>This dashboard is educational context, not investment advice, a signal service or a promise of market direction. Higher or lower readings can affect USD, equities, gold and bonds differently depending on expectations, revisions and policy.</p>
