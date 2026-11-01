@@ -96,10 +96,16 @@ interface OptionsMatrixProps {
   className?: string;
 }
 
+// Helper to display XAUUSD instead of XAUT to users
+const getDisplayAssetName = (token: string): string => {
+  if (token === 'XAUT') return 'XAUUSD';
+  return token;
+};
+
 // Robust fallback data generator when API is offline or testing
 function getFallbackOptionsData(asset: string, timeframe: string): OptionsApiResponse {
-  const spot = asset === 'BTC' ? 78032.50 : asset === 'ETH' ? 3850.25 : asset === 'SOL' ? 192.40 : 2740.80;
-  const step = asset === 'BTC' ? 1000 : asset === 'ETH' ? 100 : asset === 'SOL' ? 5 : 25;
+  const spot = asset === 'XAUT' ? 2740.80 : asset === 'BTC' ? 78032.50 : asset === 'ETH' ? 3850.25 : 192.40;
+  const step = asset === 'XAUT' ? 25 : asset === 'BTC' ? 1000 : asset === 'ETH' ? 100 : 5;
   const center = Math.round(spot / step) * step;
   const strikes: MatrixRow[] = [];
 
@@ -188,7 +194,8 @@ function getFallbackOptionsData(asset: string, timeframe: string): OptionsApiRes
   };
 }
 
-export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: OptionsMatrixProps) {
+// DEFAULT ASSET SET TO XAUT (DISPLAYED AS XAUUSD)
+export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }: OptionsMatrixProps) {
   const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL' | 'XAUT'>(initialAsset);
   const [selectedExpiries, setSelectedExpiries] = useState<string[]>([]);
   const [expiryDropdownOpen, setExpiryDropdownOpen] = useState<boolean>(false);
@@ -350,7 +357,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
   const summary = data?.summary;
   const spotPrice = data?.underlyingSpotPrice || 0;
 
-  // ROBUST FLOW ANALYTICS: Ensures OI shift is never 0 even if API omits oiChange field
+  // ROBUST FLOW ANALYTICS: Guaranteed contract shifts calculated
   const flowAnalytics = useMemo(() => {
     if (!data?.matrix || data.matrix.length === 0) return null;
 
@@ -373,12 +380,10 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
     let maxTotalShiftContracts = 0;
     let topShiftType: 'CALL' | 'PUT' = 'PUT';
 
-    // Map rows and compute reliable contract shifts
     const rowsWithShifts = data.matrix.map((r) => {
       let cShift = r.call?.oiChange || 0;
       let pShift = r.put?.oiChange || 0;
 
-      // Fallback derivation if API omits exact oiChange
       if (!cShift || cShift === 0) {
         if (r.call?.oiChangePct) {
           cShift = Math.round((Math.abs(r.call.oiChangePct) * r.callOi) / 100);
@@ -465,7 +470,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
     };
   }, [data?.matrix]);
 
-  // Market analysis with 3 nearest support and resistance strikes + PCR displayed in brackets
+  // Market analysis with 3 nearest S/R strikes + PCR in brackets
   const marketAnalysis = useMemo(() => {
     if (!summary || !spotPrice || spotPrice === 0) return null;
 
@@ -475,7 +480,6 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
 
     const matrix = data?.matrix || [];
     
-    // Sort all strikes by distance from current spot price
     // Nearest Resistances: Strikes above spot sorted ascending
     const resistanceStrikes = matrix
       .filter((r) => r.strike >= spotPrice)
@@ -514,7 +518,6 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
     const strongestResStrike = sortedByCallOi[0]?.strike || r3;
     const strongestResPcr = sortedByCallOi[0]?.strikePcr ?? r3Pcr;
 
-    // No Trade Zone boundaries (corridor around spot / immediate cluster)
     const ntzLower = s1;
     const ntzUpper = r1;
     const maxPain = summary.maxPainStrike || spotPrice;
@@ -560,7 +563,6 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         ? 'BEARISH ABSORPTION (SELLING SIDE)'
         : 'RANGEBOUND PINNING';
 
-    // Detailed verbal narrative text for the single dropdown
     const verbalFlowNarrative = `Over the last ${timeframe}, Open Interest is actively shifting with net velocity at ${netVelocity > 0 ? '+' : ''}${netVelocity.toFixed(1)}%. Total Call additions stand at +${formatNumber(flowAnalytics?.totalCallOiAdded, 0)} contracts while Put additions reached +${formatNumber(flowAnalytics?.totalPutOiAdded, 0)} contracts. Most aggressive additions are concentrating around strike $${formatNumber(flowAnalytics?.topShiftStrike, 0)}. Because options data reflects seller positioning (option writing), elevated PCR (${overallPcr.toFixed(2)}) indicates institutional market makers are aggressively selling puts to build downside floor support, capping breakdown risk below S1 ($${formatNumber(s1, 0)}). Conversely, strikes above $${formatNumber(r1, 0)} exhibit low PCR (${r1Pcr.toFixed(2)}), representing overhead call overhang where sellers are capping fast breakout attempts.`;
 
     const verbalBaselineNarrative = `Major daily structural liquidity rests between Strong Support at $${formatNumber(strongSupportStrike, 0)} (PCR: ${strongSupportPcr.toFixed(2)}) and Strongest Resistance at $${formatNumber(strongestResStrike, 0)} (PCR: ${strongestResPcr.toFixed(2)}). The No Trade Zone is defined between $${formatNumber(ntzLower, 0)} and $${formatNumber(ntzUpper, 0)}. Traders should stand aside during mid-corridor equilibrium chop and watch for high-probability buying opportunities on retests of high-PCR support levels ($${formatNumber(s1, 0)} - $${formatNumber(s3, 0)}) or selling opportunities at low-PCR resistance caps ($${formatNumber(r1, 0)} - $${formatNumber(r3, 0)}).`;
@@ -611,7 +613,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
     <div
       className={`w-full bg-[#0a0d14] text-slate-100 rounded-xl border border-slate-800 shadow-2xl p-4 md:p-6 font-sans ${className}`}
     >
-      {/* 1. TOP HEADER WITH PROMINENT CURRENT SPOT PRICE & PAIR DISPLAY */}
+      {/* 1. TOP HEADER WITH CURRENT SPOT PRICE, PAIR DISPLAY (XAUUSD AS DEFAULT) & REAL-TIME BADGE (DELTA FEED NAME REMOVED) */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-cyan-950/60 border border-cyan-500/30 rounded-lg text-cyan-400">
@@ -624,13 +626,16 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
               </h2>
               {/* CURRENT SPOT PRICE AT TOP */}
               <div className="px-3 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-2">
-                <span className="text-[11px] font-mono text-cyan-400 font-bold uppercase">{asset} SPOT:</span>
+                <span className="text-[11px] font-mono text-cyan-400 font-bold uppercase">
+                  {getDisplayAssetName(asset)} SPOT:
+                </span>
                 <span className="text-base font-extrabold text-white font-mono">
                   ${formatNumber(spotPrice, asset === 'XAUT' ? 2 : 2)}
                 </span>
               </div>
-              <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                LIVE
+              {/* REAL-TIME BADGE (DELTA EXCHANGE FEED REMOVED) */}
+              <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                REAL-TIME
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -641,9 +646,9 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Asset Switcher */}
+          {/* Asset Switcher: XAUUSD (Gold) First by Default */}
           <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
-            {(['BTC', 'ETH', 'SOL', 'XAUT'] as const).map((token) => (
+            {(['XAUT', 'BTC', 'ETH', 'SOL'] as const).map((token) => (
               <button
                 key={token}
                 onClick={() => {
@@ -656,7 +661,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
               >
-                {token === 'XAUT' ? 'XAUT (Gold)' : token}
+                {token === 'XAUT' ? 'XAUUSD' : token}
               </button>
             ))}
           </div>
@@ -812,7 +817,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
             <div className="flex items-center gap-2">
               <Compass className="w-4 h-4 text-cyan-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-100">
-                MARKET DIRECTION PROBABILITY & DATA BEHAVIOR ({asset})
+                MARKET DIRECTION PROBABILITY & DATA BEHAVIOR ({getDisplayAssetName(asset)})
               </span>
               <span
                 className={`px-2 py-0.5 text-[10px] font-black rounded ${
@@ -1292,7 +1297,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         </div>
       </div>
 
-      {/* 5. OI SHIFT CHART (PLACED DIRECTLY BELOW S/R CORRIDOR - ROBUST DATA CALCULATION) */}
+      {/* 5. OI SHIFT CHART (PLACED DIRECTLY BELOW S/R CORRIDOR) */}
       <div className="mt-4 p-4 bg-slate-950 border border-slate-800 rounded-xl">
         <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 mb-3 px-1 gap-2 border-b border-slate-800 pb-2">
           <div>
@@ -1488,14 +1493,14 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                   <td colSpan={11} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
-                      <span>Loading options contracts & volume for {asset}...</span>
+                      <span>Loading options contracts & volume for {getDisplayAssetName(asset)}...</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredMatrix.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-slate-400">
-                    No active options contracts found for {asset} on selected expiries.
+                    No active options contracts found for {getDisplayAssetName(asset)} on selected expiries.
                   </td>
                 </tr>
               ) : (
