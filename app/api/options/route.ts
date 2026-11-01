@@ -33,7 +33,7 @@ const memoryCache: {
 } = {
   data: {},
   timestamp: {},
-  TTL_MS: 10000,
+  TTL_MS: 8000,
 };
 
 function generateSignature(
@@ -78,6 +78,21 @@ function calculateMaxPain(strikesData: StrikeRow[]): number | null {
   return maxPainStrike;
 }
 
+function parseExpiryFromSymbol(symbol: string): string | null {
+  const parts = symbol.split('-');
+  if (parts.length >= 4) {
+    const raw = parts[3];
+    if (raw.length === 6 && /^\d+$/.test(raw)) {
+      const day = raw.slice(0, 2);
+      const month = raw.slice(2, 4);
+      const year = `20${raw.slice(4, 6)}`;
+      return `${year}-${month}-${day}`;
+    }
+    return raw;
+  }
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const asset = (searchParams.get('asset') || 'BTC').toUpperCase();
@@ -96,40 +111,44 @@ export async function GET(request: NextRequest) {
   const apiSecret = process.env.DELTA_API_SECRET || '9xMK3nZbkNRZwuSk2zYldxCWejBimfGFZILW3eGeythcQp6fAl9Un0u8lyVW';
 
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const productsPath = '/v2/products';
-  const productsQuery = '?states=live';
 
-  const productsSignature = apiSecret
-    ? generateSignature(apiSecret, 'GET', timestamp, productsPath, productsQuery)
+  // Query options contracts directly for BTC, ETH, SOL, XAUT
+  const tickersPath = '/v2/tickers';
+  const tickersQuery = `?contract_types=call_options,put_options&underlying_asset_symbols=${asset}`;
+  const tickersSignature = apiSecret
+    ? generateSignature(apiSecret, 'GET', timestamp, tickersPath, tickersQuery)
     : '';
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'Content-Type': 'application/json',
     'User-Agent': 'TheCorporateTrader-OptionsMatrix/1.0',
-    ...(apiKey && productsSignature
+    ...(apiKey && tickersSignature
       ? {
           'api-key': apiKey,
           timestamp,
-          signature: productsSignature,
+          signature: tickersSignature,
         }
       : {}),
   };
 
   try {
-    const productsRes = await fetch(`${BASE_URL}${productsPath}${productsQuery}`, {
+    let rawTickers: any[] = [];
+    let underlyingSpotPrice = 0;
+
+    const tickersRes = await fetch(`${BASE_URL}${tickersPath}${tickersQuery}`, {
       method: 'GET',
       headers,
-      next: { revalidate: 10 },
+      next: { revalidate: 8 },
     });
 
-    if (productsRes.status === 429) {
+    if (tickersRes.status === 429) {
       if (memoryCache.data[cacheKey]) {
         return NextResponse.json(
           {
             ...memoryCache.data[cacheKey],
             rateLimited: true,
-            warning: 'Delta Exchange rate limit reached; displaying stale snapshot',
+            warning: 'Delta Exchange rate limit reached; displaying cached snapshot',
           },
           { headers: { 'X-Cache': 'STALE-429' } }
         );
@@ -140,106 +159,112 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!productsRes.ok) {
-      throw new Error(`Delta API Products Error: ${productsRes.status} ${productsRes.statusText}`);
+    if (tickersRes.ok) {
+      const tickersData = await tickersRes.json();
+      rawTickers = Array.isArray(tickersData.result) ? tickersData.result : [];
     }
 
-    const productsData = await productsRes.json();
-    const rawProducts = Array.isArray(productsData.result) ? productsData.result : [];
-
-    let tickersMap: Record<string, any> = {};
-    let underlyingSpotPrice = 0;
-
+    // Fetch Spot Price
     try {
-      const tickersPath = '/v2/tickers';
-      const tickersTimestamp = Math.floor(Date.now() / 1000).toString();
-      const tickersSignature = apiSecret
-        ? generateSignature(apiSecret, 'GET', tickersTimestamp, tickersPath)
-        : '';
-
-      const tickerHeaders: Record<string, string> = {
-        ...headers,
-        timestamp: tickersTimestamp,
-        ...(tickersSignature ? { signature: tickersSignature } : {}),
-      };
-
-      const tickersRes = await fetch(`${BASE_URL}${tickersPath}`, {
-        method: 'GET',
-        headers: tickerHeaders,
-      });
-
-      if (tickersRes.ok) {
-        const tickersData = await tickersRes.json();
-        const rawTickers = Array.isArray(tickersData.result) ? tickersData.result : [];
-        for (const t of rawTickers) {
-          if (t.symbol) tickersMap[t.symbol] = t;
-          if (
-            (t.symbol === `${asset}USD` || t.symbol === `${asset}_USDT` || t.symbol === `.${asset}USD`) &&
-            t.mark_price
-          ) {
-            underlyingSpotPrice = parseFloat(t.mark_price) || underlyingSpotPrice;
-          }
+      const spotRes = await fetch(`${BASE_URL}/v2/tickers/${asset}USD`, { headers });
+      if (spotRes.ok) {
+        const spotData = await spotRes.json();
+        if (spotData.result?.mark_price) {
+          underlyingSpotPrice = parseFloat(spotData.result.mark_price) || 0;
+        } else if (spotData.result?.spot_price) {
+          underlyingSpotPrice = parseFloat(spotData.result.spot_price) || 0;
         }
       }
     } catch {
-      // Graceful fallback to products payload
+      // Fallback below
     }
 
-    const optionsProducts = rawProducts.filter((p: any) => {
-      const symbol = p.symbol || '';
-      const isCall = p.contract_type === 'call_options' || symbol.startsWith('C-');
-      const isPut = p.contract_type === 'put_options' || symbol.startsWith('P-');
+    // Fallback to products if tickers returned empty
+    let rawProducts: any[] = [];
+    if (rawTickers.length === 0) {
+      try {
+        const prodPath = '/v2/products';
+        const prodQuery = '?states=live';
+        const prodSig = apiSecret ? generateSignature(apiSecret, 'GET', timestamp, prodPath, prodQuery) : '';
+        const prodHeaders: Record<string, string> = {
+          ...headers,
+          ...(prodSig ? { signature: prodSig } : {}),
+        };
+        const prodRes = await fetch(`${BASE_URL}${prodPath}${prodQuery}`, { headers: prodHeaders });
+        if (prodRes.ok) {
+          const prodData = await prodRes.json();
+          rawProducts = Array.isArray(prodData.result) ? prodData.result : [];
+        }
+      } catch {
+        // Continue
+      }
+    }
+
+    const tickerMapBySymbol: Record<string, any> = {};
+    for (const t of rawTickers) {
+      if (t.symbol) tickerMapBySymbol[t.symbol] = t;
+      if (!underlyingSpotPrice && t.spot_price) {
+        underlyingSpotPrice = parseFloat(t.spot_price) || 0;
+      }
+    }
+
+    const allOptionItems: any[] = rawTickers.length > 0 ? rawTickers : rawProducts;
+    const filteredOptions = allOptionItems.filter((item: any) => {
+      const symbol = item.symbol || '';
+      const isCall = item.contract_type === 'call_options' || symbol.startsWith('C-');
+      const isPut = item.contract_type === 'put_options' || symbol.startsWith('P-');
       if (!isCall && !isPut) return false;
 
-      return (
-        symbol.includes(`-${asset}-`) ||
-        (p.underlying_asset && p.underlying_asset.symbol === asset)
-      );
+      const matchesSymbol = symbol.includes(`-${asset}-`) || symbol.startsWith(`C-${asset}-`) || symbol.startsWith(`P-${asset}-`);
+      const matchesUnderlying = item.underlying_asset?.symbol === asset || item.underlying_asset_symbol === asset;
+      return matchesSymbol || matchesUnderlying;
     });
 
     const expirySet = new Set<string>();
-    for (const p of optionsProducts) {
-      if (p.settlement_time) {
-        expirySet.add(p.settlement_time.split('T')[0]);
-      } else {
-        const parts = p.symbol.split('-');
-        if (parts.length >= 4) expirySet.add(parts[3]);
+    for (const item of filteredOptions) {
+      const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
+      if (dateFromSymbol) {
+        expirySet.add(dateFromSymbol);
+      } else if (item.settlement_time) {
+        expirySet.add(item.settlement_time.split('T')[0]);
       }
     }
 
     const availableExpiries = Array.from(expirySet).sort();
     const activeExpiry = selectedExpiry || availableExpiries[0] || null;
 
-    const filteredOptions = optionsProducts.filter((p: any) => {
+    const expiryOptions = filteredOptions.filter((item: any) => {
       if (!activeExpiry) return true;
-      if (p.settlement_time && p.settlement_time.startsWith(activeExpiry)) return true;
-      const parts = p.symbol.split('-');
-      return parts.length >= 4 && parts[3] === activeExpiry;
+      const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
+      if (dateFromSymbol === activeExpiry) return true;
+      if (item.settlement_time && item.settlement_time.startsWith(activeExpiry)) return true;
+      return false;
     });
 
     const strikesMap: Record<number, { strike: number; call: OptionMetrics | null; put: OptionMetrics | null }> = {};
 
-    for (const p of filteredOptions) {
-      const strike = parseFloat(p.strike_price);
+    for (const item of expiryOptions) {
+      const strike = parseFloat(item.strike_price);
       if (isNaN(strike)) continue;
 
       if (!strikesMap[strike]) {
         strikesMap[strike] = { strike, call: null, put: null };
       }
 
-      const isCall = p.contract_type === 'call_options' || p.symbol.startsWith('C-');
-      const ticker = tickersMap[p.symbol] || {};
+      const isCall = item.contract_type === 'call_options' || item.symbol.startsWith('C-');
+      const t = tickerMapBySymbol[item.symbol] || item;
 
-      const oi = parseFloat(ticker.open_interest || p.open_interest || 0);
-      const oiChange = parseFloat(ticker.oi_change_usd_24h || ticker.oi_change_24h || 0);
-      const oiChangePct = parseFloat(ticker.oi_change_24h_percent || 0);
-      const markPrice = parseFloat(ticker.mark_price || p.strike_price || 0);
-      const volume = parseFloat(ticker.volume_24h || ticker.volume || 0);
-      const contractValue = parseFloat(p.contract_value || 1);
-      const notional = oi * strike * contractValue;
+      // Extract real OI numbers
+      const rawOi = t.oi ?? t.open_interest ?? t.oi_contracts ?? 0;
+      const oi = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
+      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? 0);
+      const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.ltp_change_24h ?? 0);
+      const markPrice = parseFloat(t.mark_price ?? t.close ?? 0);
+      const volume = parseFloat(t.volume ?? t.volume_24h ?? 0);
+      const notional = parseFloat(t.oi_value_usd ?? 0) || (oi * strike * (parseFloat(item.contract_value) || 1));
 
       const payload: OptionMetrics = {
-        symbol: p.symbol,
+        symbol: item.symbol,
         contractType: isCall ? 'call' : 'put',
         oi,
         oiChange,
@@ -264,8 +289,8 @@ export async function GET(request: NextRequest) {
     let totalPutOiNotional = 0;
     let maxCallOi = 0;
     let maxPutOi = 0;
-    let callWallStrike: number | null = null;
-    let putSupportStrike: number | null = null;
+    let strongestResistance: number | null = null;
+    let strongestSupport: number | null = null;
 
     const strikesData: StrikeRow[] = strikesList.map((row) => {
       const callOi = row.call ? row.call.oi : 0;
@@ -280,11 +305,11 @@ export async function GET(request: NextRequest) {
 
       if (callOi > maxCallOi) {
         maxCallOi = callOi;
-        callWallStrike = row.strike;
+        strongestResistance = row.strike;
       }
       if (putOi > maxPutOi) {
         maxPutOi = putOi;
-        putSupportStrike = row.strike;
+        strongestSupport = row.strike;
       }
 
       const strikePcr = callOi > 0 ? parseFloat((putOi / callOi).toFixed(2)) : putOi > 0 ? 99.9 : 0;
@@ -299,23 +324,91 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    if (!underlyingSpotPrice && strikesList.length > 0) {
+      underlyingSpotPrice = strikesList[Math.floor(strikesList.length / 2)].strike;
+    }
+
+    // Nearest Resistance (Lowest strike > Spot with Call OI)
+    let nearestResistance: number | null = null;
+    let nearestResOi = 0;
+    const strikesAboveSpot = strikesData.filter((r) => r.strike > underlyingSpotPrice);
+    for (const r of strikesAboveSpot) {
+      if (r.callOi > nearestResOi && r.callOi > 0) {
+        nearestResOi = r.callOi;
+        nearestResistance = r.strike;
+      }
+    }
+    if (!nearestResistance && strikesAboveSpot.length > 0) {
+      nearestResistance = strikesAboveSpot[0].strike;
+    }
+
+    // Nearest Support (Highest strike < Spot with Put OI)
+    let nearestSupport: number | null = null;
+    let nearestSupOi = 0;
+    const strikesBelowSpot = strikesData.filter((r) => r.strike < underlyingSpotPrice).reverse();
+    for (const r of strikesBelowSpot) {
+      if (r.putOi > nearestSupOi && r.putOi > 0) {
+        nearestSupOi = r.putOi;
+        nearestSupport = r.strike;
+      }
+    }
+    if (!nearestSupport && strikesBelowSpot.length > 0) {
+      nearestSupport = strikesBelowSpot[0].strike;
+    }
+
     const maxPainStrike = calculateMaxPain(strikesData);
     const overallPcr = totalCallOi > 0 ? parseFloat((totalPutOi / totalCallOi).toFixed(3)) : 0;
 
     let sentiment = 'Neutral';
     let sentimentColor: 'emerald' | 'rose' | 'amber' = 'amber';
-    if (overallPcr < 0.7) {
-      sentiment = 'Bullish Bias';
+    let pcrDescription = 'Balanced call and put distribution across strikes';
+
+    if (totalCallOi === 0 && totalPutOi === 0) {
+      sentiment = 'No Open Interest';
+      sentimentColor = 'amber';
+      pcrDescription = 'No active contracts open on this expiry yet';
+    } else if (overallPcr < 0.60) {
+      sentiment = 'Strong Bullish Bias';
       sentimentColor = 'emerald';
-    } else if (overallPcr > 1.1) {
-      sentiment = 'Bearish Bias';
+      pcrDescription = 'Aggressive call dominance; low downside protection buying';
+    } else if (overallPcr <= 0.80) {
+      sentiment = 'Moderate Bullish Bias';
+      sentimentColor = 'emerald';
+      pcrDescription = 'Healthy call buying with modest hedging activity';
+    } else if (overallPcr <= 1.10) {
+      sentiment = 'Neutral / Rangebound';
+      sentimentColor = 'amber';
+      pcrDescription = 'Even distribution between call ceilings and put floors';
+    } else if (overallPcr <= 1.35) {
+      sentiment = 'Moderate Bearish Bias';
       sentimentColor = 'rose';
+      pcrDescription = 'Elevated put accumulation; downside hedging active';
+    } else {
+      sentiment = 'Strong Bearish Bias';
+      sentimentColor = 'rose';
+      pcrDescription = 'Heavy put concentration; market pricing elevated risk';
+    }
+
+    // Position Building Flow
+    let positionBuilding = 'Neutral Flow';
+    if (totalCallOi > totalPutOi * 1.3) {
+      positionBuilding = 'Call Dominant (Overhead Resistance Building)';
+    } else if (totalPutOi > totalCallOi * 1.3) {
+      positionBuilding = 'Put Dominant (Support Floor Accumulation)';
+    } else if (totalCallOi > totalPutOi) {
+      positionBuilding = 'Mild Call Addition';
+    } else if (totalPutOi > totalCallOi) {
+      positionBuilding = 'Mild Put Addition';
     }
 
     const matrix = strikesData.map((row) => {
       const signals: string[] = [];
-      if (row.strike === callWallStrike && maxCallOi > 0) signals.push('Call Wall');
-      if (row.strike === putSupportStrike && maxPutOi > 0) signals.push('Put Support');
+      if (row.strike === strongestResistance && maxCallOi > 0) signals.push('Major Resistance (Call Wall)');
+      else if (row.strike === nearestResistance) signals.push('Nearest Resistance');
+
+      if (row.strike === strongestSupport && maxPutOi > 0) signals.push('Major Support (Put Floor)');
+      else if (row.strike === nearestSupport) signals.push('Nearest Support');
+
       if (row.strike === maxPainStrike) signals.push('Max Pain');
 
       const callBarPct = maxCallOi > 0 ? Math.min(100, Math.round((row.callOi / maxCallOi) * 100)) : 0;
@@ -337,8 +430,7 @@ export async function GET(request: NextRequest) {
     const responsePayload = {
       success: true,
       asset,
-      underlyingSpotPrice:
-        underlyingSpotPrice || (strikesList.length > 0 ? strikesList[Math.floor(strikesList.length / 2)].strike : 0),
+      underlyingSpotPrice,
       selectedExpiry: activeExpiry,
       availableExpiries,
       summary: {
@@ -349,10 +441,14 @@ export async function GET(request: NextRequest) {
         overallPcr,
         sentiment,
         sentimentColor,
+        pcrDescription,
+        positionBuilding,
         maxPainStrike,
-        callWallStrike,
-        putSupportStrike,
-        contractsCount: filteredOptions.length,
+        nearestResistance,
+        strongestResistance,
+        nearestSupport,
+        strongestSupport,
+        contractsCount: expiryOptions.length,
       },
       matrix,
       updatedAt: new Date().toISOString(),
@@ -379,10 +475,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to fetch options matrix data',
-      },
+      { success: false, error: error.message || 'Failed to fetch options matrix data' },
       { status: 500 }
     );
   }
