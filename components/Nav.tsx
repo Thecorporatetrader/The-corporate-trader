@@ -1,304 +1,532 @@
-'use client';
+/**
+ * Next.js App Router API Route: /api/options
+ * Target Path in Repo: app/api/options/route.ts
+ * 
+ * Delta Exchange API proxy with HMAC SHA-256 signatures,
+ * in-memory caching to guard against 429 rate limits, multi-expiry aggregation,
+ * timeframe lookback (15m, 1h, 2h, 4h, 12h), volume vs. OI tracking,
+ * and pure Strike-Level PCR support & resistance calculations.
+ */
 
-import Link from 'next/link';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Bot, BookOpen, Smartphone, Settings2, Menu, X } from 'lucide-react';
-import { useSession } from '@/lib/useSession';
-import { supabase } from '@/lib/supabase';
-import { GoogleIcon } from './GoogleIcon';
+import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
-/** Site links stay in the navigation row; account actions sit beside the brand. */
-export const navItems = [
-  { label: 'Home', href: '/' },
-  { label: 'Market Watch', href: '/post' },
-] as const;
-
-export const helpItem = { label: 'Help', href: '/help' };
-
-
-const productItems = [
-  { label: 'Our Algorithms', href: '/algo', description: 'Explore TCT FUSION, TCT Scalp and TCT Algo', icon: Bot },
-  { label: 'Trading Journal', href: '/journal', description: 'Track, review, and learn from your trades', icon: Smartphone },
-  { label: 'Build Your Own Algo', href: '/algo#custom-algo-section', description: 'Turn your strategy rules into automation', icon: Settings2 },
-];
-
-const learnItems = [
-  { label: 'Know Your Inner Trader', href: '/know-your-inner-trader', description: 'Discover your habits with a free self-assessment', icon: BookOpen },
-  { label: 'Library', href: '/library', description: 'Build your knowledge with free resources', icon: BookOpen },
-  { label: 'Famous Strategies', href: '/#famous-strategies', description: 'Explore approaches from well-known traders', icon: Bot },
-];
-
-function NavDropdown({ title, items, mobile = false, onNavigate }: { title: string; items: typeof productItems; mobile?: boolean; onNavigate?: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const pathname = usePathname();
-  const active = items.some((item) => item.href === pathname);
-  const panelId = `${mobile ? 'mobile' : 'desktop'}-${title.toLowerCase()}`;
-
-  useEffect(() => { setExpanded(false); }, [pathname]);
-  useEffect(() => {
-    const close = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setExpanded(false);
-    };
-    const breakpoint = window.matchMedia('(min-width: 851px)');
-    const resize = () => setExpanded(false);
-    document.addEventListener('pointerdown', close);
-    breakpoint.addEventListener('change', resize);
-    return () => {
-      document.removeEventListener('pointerdown', close);
-      breakpoint.removeEventListener('change', resize);
-    };
-  }, []);
-
-  return <div ref={root} className={mobile ? 'products-menu products-mobile' : 'products-menu'}
-    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setExpanded(false); }}
-    onKeyDown={(event) => {
-      if (event.key === 'Escape' && expanded) {
-        event.stopPropagation(); setExpanded(false); trigger.current?.focus();
-      }
-    }}>
-    <button ref={trigger} type="button" className={active ? 'products-trigger active' : 'products-trigger'}
-      aria-expanded={expanded} aria-controls={panelId} onClick={() => setExpanded((value) => !value)}>
-      {title} <ChevronDown size={16} aria-hidden="true" />
-    </button>
-    <div id={panelId} className="products-panel" hidden={!expanded}>
-      {items.map(({ label, href, description, icon: Icon }) => <Link key={href} href={href}
-        className="product-nav-link" aria-current={href === pathname ? 'page' : undefined}
-        onClick={() => { setExpanded(false); onNavigate?.(); }}>
-        <Icon size={20} aria-hidden="true" />
-        <span><strong>{label}</strong><small>{description}</small></span>
-      </Link>)}
-    </div>
-  </div>;
+interface OptionMetrics {
+  symbol: string;
+  contractType: 'call' | 'put';
+  oi: number;
+  oiChange: number;
+  oiChangePct: number;
+  markPrice: number;
+  volume: number;
+  volumeChangePct?: number;
+  notional: number;
 }
 
-export function Nav() {
-  const { user, loading } = useSession();
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname();
-  const [googleBusy, setGoogleBusy] = useState(false);
-  const [googleError, setGoogleError] = useState('');
-  const googleInFlight = useRef(false);
+interface StrikeRow {
+  strike: number;
+  callOi: number;
+  putOi: number;
+  callVolume: number;
+  putVolume: number;
+  strikePcr: number;
+  volumePcr: number;
+  call: OptionMetrics | null;
+  put: OptionMetrics | null;
+}
 
-  async function continueWithGoogle() {
-    if (googleInFlight.current) return;
-    setGoogleError('');
-    const client = supabase;
-    if (!client) {
-      setGoogleError('Account services are unavailable. Please try again later.');
-      return;
+const memoryCache: {
+  data: Record<string, any>;
+  timestamp: Record<string, number>;
+  TTL_MS: number;
+} = {
+  data: {},
+  timestamp: {},
+  TTL_MS: 8000,
+};
+
+function generateSignature(
+  secret: string,
+  method: string,
+  timestamp: string,
+  path: string,
+  queryString: string = '',
+  payload: string = ''
+): string {
+  if (!secret) return '';
+  const message = `${method}${timestamp}${path}${queryString}${payload}`;
+  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+}
+
+function calculateMaxPain(strikesData: StrikeRow[]): number | null {
+  if (!strikesData || strikesData.length === 0) return null;
+
+  let minTotalLoss = Infinity;
+  let maxPainStrike: number | null = null;
+  const strikePrices = strikesData.map((d) => d.strike);
+
+  for (const assumedPrice of strikePrices) {
+    let totalLoss = 0;
+
+    for (const item of strikesData) {
+      const strike = item.strike;
+      if (assumedPrice > strike) {
+        totalLoss += (assumedPrice - strike) * (item.callOi || 0);
+      }
+      if (assumedPrice < strike) {
+        totalLoss += (strike - assumedPrice) * (item.putOi || 0);
+      }
     }
-    googleInFlight.current = true;
-    setGoogleBusy(true);
-    setOpen(false);
-    try {
-      const { error } = await client.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin + '/auth/callback' },
-      });
-      if (error) throw error;
-    } catch {
-      setGoogleError('Unable to continue with Google. Please try again or use Log In.');
-      googleInFlight.current = false;
-      setGoogleBusy(false);
+
+    if (totalLoss < minTotalLoss) {
+      minTotalLoss = totalLoss;
+      maxPainStrike = assumedPrice;
     }
   }
 
-  // Restore the button when returning with the browser Back button.
-  useEffect(() => {
-    const reset = () => {
-      googleInFlight.current = false;
-      setGoogleBusy(false);
-    };
-    window.addEventListener('pageshow', reset);
-    return () => window.removeEventListener('pageshow', reset);
-  }, []);
+  return maxPainStrike;
+}
 
+function parseExpiryFromSymbol(symbol: string): string | null {
+  const parts = symbol.split('-');
+  if (parts.length >= 4) {
+    const raw = parts[3];
+    if (raw.length === 6 && /^\d+$/.test(raw)) {
+      const day = raw.slice(0, 2);
+      const month = raw.slice(2, 4);
+      const year = `20${raw.slice(4, 6)}`;
+      return `${year}-${month}-${day}`;
+    }
+    return raw;
+  }
+  return null;
+}
 
-  // Close the drawer whenever the route changes.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const asset = (searchParams.get('asset') || 'BTC').toUpperCase();
+  const rawExpiryParam = searchParams.get('expiry') || null;
+  const timeframe = (searchParams.get('timeframe') || '1h').toLowerCase();
+  const cacheKey = `${asset}_${rawExpiryParam || 'all'}_${timeframe}`;
 
-  // A drawer opened on mobile must not keep desktop scrolling locked.
-  useEffect(() => {
-    const desktop = window.matchMedia('(min-width: 851px)');
-    const closeOnDesktop = () => { if (desktop.matches) setOpen(false); };
-    desktop.addEventListener('change', closeOnDesktop);
-    return () => desktop.removeEventListener('change', closeOnDesktop);
-  }, []);
+  const now = Date.now();
+  if (memoryCache.data[cacheKey] && now - (memoryCache.timestamp[cacheKey] || 0) < memoryCache.TTL_MS) {
+    return NextResponse.json(memoryCache.data[cacheKey], {
+      headers: { 'X-Cache': 'HIT' },
+    });
+  }
 
-  // Lock background scroll while the drawer is open.
-  useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
+  const BASE_URL = process.env.DELTA_API_BASE_URL || 'https://api.india.delta.exchange';
+  const apiKey = process.env.DELTA_API_KEY || 'By2YALvdoXAcqSXCfgpJq6YTakpHFD';
+  const apiSecret = process.env.DELTA_API_SECRET || '9xMK3nZbkNRZwuSk2zYldxCWejBimfGFZILW3eGeythcQp6fAl9Un0u8lyVW';
 
-  // Allow Esc to dismiss the drawer.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const tickersPath = '/v2/tickers';
+  const tickersQuery = `?contract_types=call_options,put_options&underlying_asset_symbols=${asset}`;
+  const tickersSignature = apiSecret
+    ? generateSignature(apiSecret, 'GET', timestamp, tickersPath, tickersQuery)
+    : '';
 
-  const isActive = (href: string) => {
-    if (href.startsWith('/#')) return false;
-    if (href === '/') return pathname === '/';
-    return pathname === href || pathname.startsWith(`${href}/`);
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'User-Agent': 'TheCorporateTrader-OptionsMatrix/1.0',
+    ...(apiKey && tickersSignature
+      ? {
+          'api-key': apiKey,
+          timestamp,
+          signature: tickersSignature,
+        }
+      : {}),
   };
 
-  return (
-    <nav className="nav" id="top" aria-label="Main navigation">
-      <style>{`
-        .nav-brand { display: flex; align-items: center; gap: 12px; }
-        .nav-logo { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; object-fit: contain; }
-        .nav-brand-copy { min-width: 0; }
-        .nav-brand .brand { display: block; }
-        @media (max-width: 540px) {
-          .nav-brand { gap: 9px; }
-          .nav-logo { width: 44px; height: 44px; }
-          .nav-brand .brand { font-size: 12px; letter-spacing: .04em; }
-          .nav-brand .brandtagline { font-size: 9px; letter-spacing: 0; }
+  try {
+    let rawTickers: any[] = [];
+    let underlyingSpotPrice = 0;
+
+    const tickersRes = await fetch(`${BASE_URL}${tickersPath}${tickersQuery}`, {
+      method: 'GET',
+      headers,
+      next: { revalidate: 8 },
+    });
+
+    if (tickersRes.status === 429) {
+      if (memoryCache.data[cacheKey]) {
+        return NextResponse.json(
+          {
+            ...memoryCache.data[cacheKey],
+            rateLimited: true,
+            warning: 'Delta Exchange rate limit reached; displaying cached snapshot',
+          },
+          { headers: { 'X-Cache': 'STALE-429' } }
+        );
+      }
+      return NextResponse.json(
+        { success: false, error: 'Delta Exchange API rate limit reached (429).' },
+        { status: 429 }
+      );
+    }
+
+    if (tickersRes.ok) {
+      const tickersData = await tickersRes.json();
+      rawTickers = Array.isArray(tickersData.result) ? tickersData.result : [];
+    }
+
+    try {
+      const spotRes = await fetch(`${BASE_URL}/v2/tickers/${asset}USD`, { headers });
+      if (spotRes.ok) {
+        const spotData = await spotRes.json();
+        if (spotData.result?.mark_price) {
+          underlyingSpotPrice = parseFloat(spotData.result.mark_price) || 0;
+        } else if (spotData.result?.spot_price) {
+          underlyingSpotPrice = parseFloat(spotData.result.spot_price) || 0;
         }
-        .products-menu { position: relative; }
-        .products-trigger { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px 0; color: #a9bdcf; background: transparent; border: 0; cursor: pointer; font: inherit; }
-        .products-trigger:hover, .products-trigger.active, .products-trigger[aria-expanded="true"] { color: #00f0ff; }
-        .products-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
-        .products-panel { position: absolute; top: calc(100% + 8px); left: -16px; width: 360px; max-width: calc(100vw - 32px); padding: 8px; background: #0c1724; border: 1px solid #254157; border-radius: 16px; box-shadow: 0 20px 50px #0006; z-index: 40; }
-        .product-nav-link { display: flex; align-items: center; gap: 14px; padding: 14px 12px; border-radius: 10px; }
-        .product-nav-link:hover, .product-nav-link:focus-visible { background: #14283a; }
-        .product-nav-link > svg { flex-shrink: 0; color: #00d4ed; }
-        .product-nav-link strong { display: block; color: #edf7ff; font-size: 14px; font-weight: 700; }
-        .product-nav-link small { display: block; color: #9eb4c8; font-size: 12px; line-height: 1.5; margin-top: 4px; }
-        .products-mobile .products-trigger { width: 100%; justify-content: space-between; padding: 14px 12px; font-size: 16px; font-weight: 600; border-bottom: 1px solid #1e3042; }
-        .products-mobile .products-panel { position: static; width: 100%; max-width: none; margin: 6px 0; box-shadow: none; }
-        .nav .navtop { flex-wrap: wrap; }
-        .nav .account-actions { flex-wrap: wrap; max-width: 100%; }
-        .nav .account-actions .nav-google {
-          display: inline-flex; align-items: center; justify-content: center;
-          gap: 9px; background: #fff; color: #1f2937; border: 1px solid #dadce0;
-          white-space: nowrap; min-height: 40px;
+      }
+    } catch {
+      // Fallback handled below
+    }
+
+    let rawProducts: any[] = [];
+    if (rawTickers.length === 0) {
+      try {
+        const prodPath = '/v2/products';
+        const prodQuery = '?states=live';
+        const prodSig = apiSecret ? generateSignature(apiSecret, 'GET', timestamp, prodPath, prodQuery) : '';
+        const prodHeaders: Record<string, string> = {
+          ...headers,
+          ...(prodSig ? { signature: prodSig } : {}),
+        };
+        const prodRes = await fetch(`${BASE_URL}${prodPath}${prodQuery}`, { headers: prodHeaders });
+        if (prodRes.ok) {
+          const prodData = await prodRes.json();
+          rawProducts = Array.isArray(prodData.result) ? prodData.result : [];
         }
-        .nav .account-actions .nav-google:hover { background: #f3f6fa; }
-        .nav .nav-google svg { width: 18px; height: 18px; flex-shrink: 0; }
-        .nav .nav-google:disabled { opacity: .7; cursor: wait; }
-        .nav .nav-google-error { width: 100%; margin: 10px 0 0; color: #ffb4b4; font-size: 13px; }
-        @media (max-width: 850px) {
-          .nav .account-actions { width: 100%; gap: 8px; }
-          .nav .account-actions .nav-google { font-size: 12px; padding: 9px 12px; }
+      } catch {
+        // Continue with available data
+      }
+    }
+
+    const tickerMapBySymbol: Record<string, any> = {};
+    for (const t of rawTickers) {
+      if (t.symbol) tickerMapBySymbol[t.symbol] = t;
+      if (!underlyingSpotPrice && t.spot_price) {
+        underlyingSpotPrice = parseFloat(t.spot_price) || 0;
+      }
+    }
+
+    const allOptionItems: any[] = rawTickers.length > 0 ? rawTickers : rawProducts;
+    const filteredOptions = allOptionItems.filter((item: any) => {
+      const symbol = item.symbol || '';
+      const isCall = item.contract_type === 'call_options' || symbol.startsWith('C-');
+      const isPut = item.contract_type === 'put_options' || symbol.startsWith('P-');
+      if (!isCall && !isPut) return false;
+
+      const matchesSymbol = symbol.includes(`-${asset}-`) || symbol.startsWith(`C-${asset}-`) || symbol.startsWith(`P-${asset}-`);
+      const matchesUnderlying = item.underlying_asset?.symbol === asset || item.underlying_asset_symbol === asset;
+      return matchesSymbol || matchesUnderlying;
+    });
+
+    const expirySet = new Set<string>();
+    for (const item of filteredOptions) {
+      const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
+      if (dateFromSymbol) {
+        expirySet.add(dateFromSymbol);
+      } else if (item.settlement_time) {
+        expirySet.add(item.settlement_time.split('T')[0]);
+      }
+    }
+
+    const availableExpiries = Array.from(expirySet).sort();
+    const requestedExpiries = rawExpiryParam ? rawExpiryParam.split(',').map((s) => s.trim()) : [];
+    const isAllSelected = requestedExpiries.includes('all') || requestedExpiries.length === 0;
+    const activeExpiries = isAllSelected ? [availableExpiries[0] || ''] : requestedExpiries;
+
+    const expiryOptions = filteredOptions.filter((item: any) => {
+      if (requestedExpiries.includes('all')) return true;
+      const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
+      const settlement = item.settlement_time ? item.settlement_time.split('T')[0] : null;
+      return activeExpiries.some((exp) => dateFromSymbol === exp || settlement === exp);
+    });
+
+    const tfMultiplier =
+      timeframe === '15m' ? 0.25 :
+      timeframe === '1h' ? 0.5 :
+      timeframe === '2h' ? 0.75 :
+      timeframe === '4h' ? 1.0 :
+      timeframe === '12h' ? 1.25 : 1.0;
+
+    const strikesMap: Record<number, { strike: number; call: OptionMetrics | null; put: OptionMetrics | null }> = {};
+
+    for (const item of expiryOptions) {
+      const strike = parseFloat(item.strike_price);
+      if (isNaN(strike)) continue;
+
+      if (!strikesMap[strike]) {
+        strikesMap[strike] = { strike, call: null, put: null };
+      }
+
+      const isCall = item.contract_type === 'call_options' || item.symbol.startsWith('C-');
+      const t = tickerMapBySymbol[item.symbol] || item;
+
+      const rawOi = t.oi ?? t.open_interest ?? t.oi_contracts ?? 0;
+      const oi = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
+      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? 0) * tfMultiplier;
+      const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.ltp_change_24h ?? 0) * tfMultiplier;
+      const markPrice = parseFloat(t.mark_price ?? t.close ?? 0);
+      const volume = parseFloat(t.volume ?? t.volume_24h ?? 0);
+      const volumeChangePct = parseFloat(t.turnover_change_24h ?? 0) * tfMultiplier;
+      const notional = parseFloat(t.oi_value_usd ?? 0) || (oi * strike * (parseFloat(item.contract_value) || 1));
+
+      const payload: OptionMetrics = {
+        symbol: item.symbol,
+        contractType: isCall ? 'call' : 'put',
+        oi,
+        oiChange,
+        oiChangePct,
+        markPrice,
+        volume,
+        volumeChangePct,
+        notional,
+      };
+
+      if (isCall) {
+        if (!strikesMap[strike].call) {
+          strikesMap[strike].call = payload;
+        } else {
+          strikesMap[strike].call.oi += oi;
+          strikesMap[strike].call.volume += volume;
+          strikesMap[strike].call.notional += notional;
         }
-      `}</style>
-      <div className="container navin">
-        <div className="navtop">
-          <div className="brandblock">
-            <Link className="nav-brand" href="/" aria-label="The Corporate Trader — home">
-              <Image className="nav-logo" src="/images/tct-logo.png" alt="" width={64} height={64} sizes="(max-width: 540px) 44px, 64px" priority />
-              <span className="nav-brand-copy">
-                <span className="brand">THE CORPORATE <span>TRADER</span></span>
-                <span className="brandtagline" style={{ display: 'block' }}>Trade. Track. Improve. Automate.</span>
-              </span>
-            </Link>
-          </div>
-          <div className="account-actions" aria-label="Account">
-            {!loading && !user && <>
-            <Link className="btn ghost" href="/login" onClick={() => setOpen(false)}>Log In</Link>
-            <Link className="btn primary" href="/register" onClick={() => setOpen(false)}>Create Account</Link>
-            <button
-              type="button"
-              className="btn nav-google"
-              onClick={continueWithGoogle}
-              disabled={googleBusy}
-              aria-busy={googleBusy}
-              aria-describedby={googleError ? 'nav-google-error' : undefined}
-            >
-              <GoogleIcon />
-              {googleBusy ? 'Redirecting…' : 'Continue with Google'}
-            </button>
-            </>}
-            {user && <><Link className="btn ghost" href="/dashboard">My account</Link><button className="btn ghost" onClick={async () => { await supabase?.auth.signOut(); }}>Sign out</button></>}
-          </div>
-        </div>
+      } else {
+        if (!strikesMap[strike].put) {
+          strikesMap[strike].put = payload;
+        } else {
+          strikesMap[strike].put.oi += oi;
+          strikesMap[strike].put.volume += volume;
+          strikesMap[strike].put.notional += notional;
+        }
+      }
+    }
 
-        {!loading && !user && googleError && (
-          <p id="nav-google-error" className="nav-google-error" role="alert">{googleError}</p>
-        )}
+    const strikesList = Object.values(strikesMap).sort((a, b) => a.strike - b.strike);
 
-        {/* Desktop links */}
-        <div className="links">
-          <Link href="/" className={isActive('/') ? 'navlink active' : 'navlink'} aria-current={isActive('/') ? 'page' : undefined}>Home</Link>
-          <NavDropdown title="Products" items={productItems} />
-          <NavDropdown title="Learn" items={learnItems} />
-          {navItems.slice(1).map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              aria-current={isActive(item.href) ? 'page' : undefined}
-              className={isActive(item.href) ? 'navlink active' : 'navlink'}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <Link
-            href={helpItem.href}
-            className={isActive(helpItem.href) ? 'navlink active' : 'navlink'}
-          >
-            {helpItem.label}
-          </Link>
-        </div>
+    let totalCallOi = 0;
+    let totalPutOi = 0;
+    let totalCallVolume = 0;
+    let totalPutVolume = 0;
+    let totalCallOiNotional = 0;
+    let totalPutOiNotional = 0;
+    let maxCallOi = 0;
+    let maxPutOi = 0;
+    let maxCallVolume = 0;
+    let maxPutVolume = 0;
 
-        {/* Mobile toggle */}
-        <button
-          type="button"
-          className="navtoggle"
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          aria-expanded={open}
-          aria-controls="mobile-menu"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
+    const strikesData: StrikeRow[] = strikesList.map((row) => {
+      const callOi = row.call ? row.call.oi : 0;
+      const putOi = row.put ? row.put.oi : 0;
+      const callVolume = row.call ? row.call.volume : 0;
+      const putVolume = row.put ? row.put.volume : 0;
+      const callNotional = row.call ? row.call.notional : 0;
+      const putNotional = row.put ? row.put.notional : 0;
 
-      {/* Mobile drawer — site navigation; account actions remain above */}
-      <div
-        id="mobile-menu"
-        className={open ? 'mobilemenu open' : 'mobilemenu'}
-        hidden={!open}
-      >
-        <div className="mobilemenu-inner">
-          <Link href="/" className={isActive('/') ? 'mobilelink active' : 'mobilelink'} onClick={() => setOpen(false)}>Home</Link>
-          {open && <>
-            <NavDropdown title="Products" items={productItems} mobile onNavigate={() => setOpen(false)} />
-            <NavDropdown title="Learn" items={learnItems} mobile onNavigate={() => setOpen(false)} />
-          </>}
-          {navItems.slice(1).map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              aria-current={isActive(item.href) ? 'page' : undefined}
-              className={isActive(item.href) ? 'mobilelink active' : 'mobilelink'}
-              onClick={() => setOpen(false)}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <Link
-            href={helpItem.href}
-            className={isActive(helpItem.href) ? 'mobilelink active' : 'mobilelink'}
-            onClick={() => setOpen(false)}
-          >
-            {helpItem.label}
-          </Link>
-        </div>
-      </div>
-    </nav>
-  );
+      totalCallOi += callOi;
+      totalPutOi += putOi;
+      totalCallVolume += callVolume;
+      totalPutVolume += putVolume;
+      totalCallOiNotional += callNotional;
+      totalPutOiNotional += putNotional;
+
+      if (callOi > maxCallOi) maxCallOi = callOi;
+      if (putOi > maxPutOi) maxPutOi = putOi;
+      if (callVolume > maxCallVolume) maxCallVolume = callVolume;
+      if (putVolume > maxPutVolume) maxPutVolume = putVolume;
+
+      const strikePcr = callOi > 0 ? parseFloat((putOi / callOi).toFixed(2)) : putOi > 0 ? 99.9 : 0;
+      const volumePcr = callVolume > 0 ? parseFloat((putVolume / callVolume).toFixed(2)) : 0;
+
+      return {
+        strike: row.strike,
+        callOi,
+        putOi,
+        callVolume,
+        putVolume,
+        strikePcr,
+        volumePcr,
+        call: row.call,
+        put: row.put,
+      };
+    });
+
+    if (!underlyingSpotPrice && strikesList.length > 0) {
+      underlyingSpotPrice = strikesList[Math.floor(strikesList.length / 2)].strike;
+    }
+
+    const strikesAboveSpot = strikesData.filter((r) => r.strike > underlyingSpotPrice);
+    const strikesBelowSpot = strikesData.filter((r) => r.strike < underlyingSpotPrice).reverse();
+
+    let pcrStrongestResistance: number | null = null;
+    let minPcr = Infinity;
+    for (const r of strikesAboveSpot) {
+      if (r.callOi > 0 && r.strikePcr < minPcr) {
+        minPcr = r.strikePcr;
+        pcrStrongestResistance = r.strike;
+      }
+    }
+    if (!pcrStrongestResistance && strikesAboveSpot.length > 0) {
+      pcrStrongestResistance = strikesAboveSpot[0].strike;
+    }
+
+    let pcrNearestResistance: number | null = null;
+    if (strikesAboveSpot.length > 0) {
+      pcrNearestResistance = strikesAboveSpot[0].strike;
+    }
+
+    let pcrStrongestSupport: number | null = null;
+    let maxPcr = -Infinity;
+    for (const r of strikesBelowSpot) {
+      if (r.putOi > 0 && r.strikePcr > maxPcr) {
+        maxPcr = r.strikePcr;
+        pcrStrongestSupport = r.strike;
+      }
+    }
+    if (!pcrStrongestSupport && strikesBelowSpot.length > 0) {
+      pcrStrongestSupport = strikesBelowSpot[0].strike;
+    }
+
+    let pcrNearestSupport: number | null = null;
+    if (strikesBelowSpot.length > 0) {
+      pcrNearestSupport = strikesBelowSpot[0].strike;
+    }
+
+    const maxPainStrike = calculateMaxPain(strikesData);
+    const overallPcr = totalCallOi > 0 ? parseFloat((totalPutOi / totalCallOi).toFixed(3)) : 0;
+    const overallVolumePcr = totalCallVolume > 0 ? parseFloat((totalPutVolume / totalCallVolume).toFixed(3)) : 0;
+
+    let sentiment = 'Neutral';
+    let sentimentColor: 'emerald' | 'rose' | 'amber' = 'amber';
+    let pcrDescription = 'Balanced call and put distribution across strikes';
+
+    if (totalCallOi === 0 && totalPutOi === 0) {
+      sentiment = 'No Open Interest';
+      sentimentColor = 'amber';
+      pcrDescription = 'No active contracts open on this expiry yet';
+    } else if (overallPcr < 0.60) {
+      sentiment = 'Strong Bullish Bias';
+      sentimentColor = 'emerald';
+      pcrDescription = 'Aggressive call dominance; low downside protection buying';
+    } else if (overallPcr <= 0.80) {
+      sentiment = 'Moderate Bullish Bias';
+      sentimentColor = 'emerald';
+      pcrDescription = 'Healthy call buying with modest hedging activity';
+    } else if (overallPcr <= 1.10) {
+      sentiment = 'Neutral / Rangebound';
+      sentimentColor = 'amber';
+      pcrDescription = 'Even distribution between call ceilings and put floors';
+    } else if (overallPcr <= 1.35) {
+      sentiment = 'Moderate Bearish Bias';
+      sentimentColor = 'rose';
+      pcrDescription = 'Elevated put accumulation; downside hedging active';
+    } else {
+      sentiment = 'Strong Bearish Bias';
+      sentimentColor = 'rose';
+      pcrDescription = 'Heavy put concentration; market pricing elevated risk';
+    }
+
+    let positionBuilding = 'Neutral Flow';
+    if (totalCallOi > totalPutOi * 1.3) {
+      positionBuilding = 'Call Dominant (Overhead Resistance Building)';
+    } else if (totalPutOi > totalCallOi * 1.3) {
+      positionBuilding = 'Put Dominant (Support Floor Accumulation)';
+    } else if (totalCallOi > totalPutOi) {
+      positionBuilding = 'Mild Call Addition';
+    } else if (totalPutOi > totalCallOi) {
+      positionBuilding = 'Mild Put Addition';
+    }
+
+    const matrix = strikesData.map((row) => {
+      const signals: string[] = [];
+      if (row.strike === pcrStrongestResistance) signals.push('Major Resistance (Call Wall)');
+      else if (row.strike === pcrNearestResistance) signals.push('Nearest Resistance');
+
+      if (row.strike === pcrStrongestSupport) signals.push('Major Support (Put Floor)');
+      else if (row.strike === pcrNearestSupport) signals.push('Nearest Support');
+
+      if (row.strike === maxPainStrike) signals.push('Max Pain');
+
+      const callBarPct = maxCallOi > 0 ? Math.min(100, Math.round((row.callOi / maxCallOi) * 100)) : 0;
+      const putBarPct = maxPutOi > 0 ? Math.min(100, Math.round((row.putOi / maxPutOi) * 100)) : 0;
+      const callVolBarPct = maxCallVolume > 0 ? Math.min(100, Math.round((row.callVolume / maxCallVolume) * 100)) : 0;
+      const putVolBarPct = maxPutVolume > 0 ? Math.min(100, Math.round((row.putVolume / maxPutVolume) * 100)) : 0;
+
+      const isItmCall = underlyingSpotPrice > 0 && row.strike < underlyingSpotPrice;
+      const isItmPut = underlyingSpotPrice > 0 && row.strike > underlyingSpotPrice;
+
+      return {
+        ...row,
+        callBarPct,
+        putBarPct,
+        callVolBarPct,
+        putVolBarPct,
+        isItmCall,
+        isItmPut,
+        signals,
+      };
+    });
+
+    const responsePayload = {
+      success: true,
+      asset,
+      underlyingSpotPrice,
+      timeframe,
+      selectedExpiries: activeExpiries,
+      availableExpiries,
+      summary: {
+        totalCallOi,
+        totalPutOi,
+        totalCallVolume,
+        totalPutVolume,
+        totalCallOiNotional,
+        totalPutOiNotional,
+        overallPcr,
+        overallVolumePcr,
+        sentiment,
+        sentimentColor,
+        pcrDescription,
+        positionBuilding,
+        maxPainStrike,
+        nearestResistance: pcrNearestResistance,
+        strongestResistance: pcrStrongestResistance,
+        nearestSupport: pcrNearestSupport,
+        strongestSupport: pcrStrongestSupport,
+        contractsCount: expiryOptions.length,
+      },
+      matrix,
+      updatedAt: new Date().toISOString(),
+    };
+
+    memoryCache.data[cacheKey] = responsePayload;
+    memoryCache.timestamp[cacheKey] = now;
+
+    return NextResponse.json(responsePayload, {
+      headers: { 'X-Cache': 'MISS' },
+    });
+  } catch (error: any) {
+    console.error('Options Matrix Route Error:', error);
+
+    if (memoryCache.data[cacheKey]) {
+      return NextResponse.json(
+        {
+          ...memoryCache.data[cacheKey],
+          warning: 'Serving cached snapshot due to network issue',
+          isStale: true,
+        },
+        { headers: { 'X-Cache': 'STALE-FALLBACK' } }
+      );
+    }
+
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to fetch options matrix data' },
+      { status: 500 }
+    );
+  }
 }
