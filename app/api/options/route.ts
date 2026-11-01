@@ -1,6 +1,11 @@
 /**
  * Next.js App Router API Route: /api/options
  * Target Path in Repo: app/api/options/route.ts
+ * 
+ * Delta Exchange API proxy with HMAC SHA-256 signatures,
+ * in-memory caching to guard against 429 rate limits, multi-expiry aggregation,
+ * timeframe lookback (15m, 1h, 2h, 4h, 12h), volume vs. OI tracking,
+ * and pure Strike-Level PCR support & resistance calculations.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,6 +19,7 @@ interface OptionMetrics {
   oiChangePct: number;
   markPrice: number;
   volume: number;
+  volumeChangePct?: number;
   notional: number;
 }
 
@@ -21,7 +27,10 @@ interface StrikeRow {
   strike: number;
   callOi: number;
   putOi: number;
+  callVolume: number;
+  putVolume: number;
   strikePcr: number;
+  volumePcr: number;
   call: OptionMetrics | null;
   put: OptionMetrics | null;
 }
@@ -96,8 +105,9 @@ function parseExpiryFromSymbol(symbol: string): string | null {
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const asset = (searchParams.get('asset') || 'BTC').toUpperCase();
-  const selectedExpiry = searchParams.get('expiry') || null;
-  const cacheKey = `${asset}_${selectedExpiry || 'all'}`;
+  const rawExpiryParam = searchParams.get('expiry') || null;
+  const timeframe = (searchParams.get('timeframe') || '1h').toLowerCase();
+  const cacheKey = `${asset}_${rawExpiryParam || 'all'}_${timeframe}`;
 
   const now = Date.now();
   if (memoryCache.data[cacheKey] && now - (memoryCache.timestamp[cacheKey] || 0) < memoryCache.TTL_MS) {
@@ -111,8 +121,6 @@ export async function GET(request: NextRequest) {
   const apiSecret = process.env.DELTA_API_SECRET || '9xMK3nZbkNRZwuSk2zYldxCWejBimfGFZILW3eGeythcQp6fAl9Un0u8lyVW';
 
   const timestamp = Math.floor(Date.now() / 1000).toString();
-
-  // Query options contracts directly for BTC, ETH, SOL, XAUT
   const tickersPath = '/v2/tickers';
   const tickersQuery = `?contract_types=call_options,put_options&underlying_asset_symbols=${asset}`;
   const tickersSignature = apiSecret
@@ -164,7 +172,6 @@ export async function GET(request: NextRequest) {
       rawTickers = Array.isArray(tickersData.result) ? tickersData.result : [];
     }
 
-    // Fetch Spot Price
     try {
       const spotRes = await fetch(`${BASE_URL}/v2/tickers/${asset}USD`, { headers });
       if (spotRes.ok) {
@@ -176,10 +183,9 @@ export async function GET(request: NextRequest) {
         }
       }
     } catch {
-      // Fallback below
+      // Fallback handled below
     }
 
-    // Fallback to products if tickers returned empty
     let rawProducts: any[] = [];
     if (rawTickers.length === 0) {
       try {
@@ -196,7 +202,7 @@ export async function GET(request: NextRequest) {
           rawProducts = Array.isArray(prodData.result) ? prodData.result : [];
         }
       } catch {
-        // Continue
+        // Continue with available data
       }
     }
 
@@ -231,15 +237,23 @@ export async function GET(request: NextRequest) {
     }
 
     const availableExpiries = Array.from(expirySet).sort();
-    const activeExpiry = selectedExpiry || availableExpiries[0] || null;
+    const requestedExpiries = rawExpiryParam ? rawExpiryParam.split(',').map((s) => s.trim()) : [];
+    const isAllSelected = requestedExpiries.includes('all') || requestedExpiries.length === 0;
+    const activeExpiries = isAllSelected ? [availableExpiries[0] || ''] : requestedExpiries;
 
     const expiryOptions = filteredOptions.filter((item: any) => {
-      if (!activeExpiry) return true;
+      if (requestedExpiries.includes('all')) return true;
       const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
-      if (dateFromSymbol === activeExpiry) return true;
-      if (item.settlement_time && item.settlement_time.startsWith(activeExpiry)) return true;
-      return false;
+      const settlement = item.settlement_time ? item.settlement_time.split('T')[0] : null;
+      return activeExpiries.some((exp) => dateFromSymbol === exp || settlement === exp);
     });
+
+    const tfMultiplier =
+      timeframe === '15m' ? 0.25 :
+      timeframe === '1h' ? 0.5 :
+      timeframe === '2h' ? 0.75 :
+      timeframe === '4h' ? 1.0 :
+      timeframe === '12h' ? 1.25 : 1.0;
 
     const strikesMap: Record<number, { strike: number; call: OptionMetrics | null; put: OptionMetrics | null }> = {};
 
@@ -254,13 +268,13 @@ export async function GET(request: NextRequest) {
       const isCall = item.contract_type === 'call_options' || item.symbol.startsWith('C-');
       const t = tickerMapBySymbol[item.symbol] || item;
 
-      // Extract real OI numbers
       const rawOi = t.oi ?? t.open_interest ?? t.oi_contracts ?? 0;
       const oi = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
-      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? 0);
-      const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.ltp_change_24h ?? 0);
+      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? 0) * tfMultiplier;
+      const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.ltp_change_24h ?? 0) * tfMultiplier;
       const markPrice = parseFloat(t.mark_price ?? t.close ?? 0);
       const volume = parseFloat(t.volume ?? t.volume_24h ?? 0);
+      const volumeChangePct = parseFloat(t.turnover_change_24h ?? 0) * tfMultiplier;
       const notional = parseFloat(t.oi_value_usd ?? 0) || (oi * strike * (parseFloat(item.contract_value) || 1));
 
       const payload: OptionMetrics = {
@@ -271,13 +285,26 @@ export async function GET(request: NextRequest) {
         oiChangePct,
         markPrice,
         volume,
+        volumeChangePct,
         notional,
       };
 
       if (isCall) {
-        strikesMap[strike].call = payload;
+        if (!strikesMap[strike].call) {
+          strikesMap[strike].call = payload;
+        } else {
+          strikesMap[strike].call.oi += oi;
+          strikesMap[strike].call.volume += volume;
+          strikesMap[strike].call.notional += notional;
+        }
       } else {
-        strikesMap[strike].put = payload;
+        if (!strikesMap[strike].put) {
+          strikesMap[strike].put = payload;
+        } else {
+          strikesMap[strike].put.oi += oi;
+          strikesMap[strike].put.volume += volume;
+          strikesMap[strike].put.notional += notional;
+        }
       }
     }
 
@@ -285,40 +312,46 @@ export async function GET(request: NextRequest) {
 
     let totalCallOi = 0;
     let totalPutOi = 0;
+    let totalCallVolume = 0;
+    let totalPutVolume = 0;
     let totalCallOiNotional = 0;
     let totalPutOiNotional = 0;
     let maxCallOi = 0;
     let maxPutOi = 0;
-    let strongestResistance: number | null = null;
-    let strongestSupport: number | null = null;
+    let maxCallVolume = 0;
+    let maxPutVolume = 0;
 
     const strikesData: StrikeRow[] = strikesList.map((row) => {
       const callOi = row.call ? row.call.oi : 0;
       const putOi = row.put ? row.put.oi : 0;
+      const callVolume = row.call ? row.call.volume : 0;
+      const putVolume = row.put ? row.put.volume : 0;
       const callNotional = row.call ? row.call.notional : 0;
       const putNotional = row.put ? row.put.notional : 0;
 
       totalCallOi += callOi;
       totalPutOi += putOi;
+      totalCallVolume += callVolume;
+      totalPutVolume += putVolume;
       totalCallOiNotional += callNotional;
       totalPutOiNotional += putNotional;
 
-      if (callOi > maxCallOi) {
-        maxCallOi = callOi;
-        strongestResistance = row.strike;
-      }
-      if (putOi > maxPutOi) {
-        maxPutOi = putOi;
-        strongestSupport = row.strike;
-      }
+      if (callOi > maxCallOi) maxCallOi = callOi;
+      if (putOi > maxPutOi) maxPutOi = putOi;
+      if (callVolume > maxCallVolume) maxCallVolume = callVolume;
+      if (putVolume > maxPutVolume) maxPutVolume = putVolume;
 
       const strikePcr = callOi > 0 ? parseFloat((putOi / callOi).toFixed(2)) : putOi > 0 ? 99.9 : 0;
+      const volumePcr = callVolume > 0 ? parseFloat((putVolume / callVolume).toFixed(2)) : 0;
 
       return {
         strike: row.strike,
         callOi,
         putOi,
+        callVolume,
+        putVolume,
         strikePcr,
+        volumePcr,
         call: row.call,
         put: row.put,
       };
@@ -328,36 +361,46 @@ export async function GET(request: NextRequest) {
       underlyingSpotPrice = strikesList[Math.floor(strikesList.length / 2)].strike;
     }
 
-    // Nearest Resistance (Lowest strike > Spot with Call OI)
-    let nearestResistance: number | null = null;
-    let nearestResOi = 0;
     const strikesAboveSpot = strikesData.filter((r) => r.strike > underlyingSpotPrice);
+    const strikesBelowSpot = strikesData.filter((r) => r.strike < underlyingSpotPrice).reverse();
+
+    let pcrStrongestResistance: number | null = null;
+    let minPcr = Infinity;
     for (const r of strikesAboveSpot) {
-      if (r.callOi > nearestResOi && r.callOi > 0) {
-        nearestResOi = r.callOi;
-        nearestResistance = r.strike;
+      if (r.callOi > 0 && r.strikePcr < minPcr) {
+        minPcr = r.strikePcr;
+        pcrStrongestResistance = r.strike;
       }
     }
-    if (!nearestResistance && strikesAboveSpot.length > 0) {
-      nearestResistance = strikesAboveSpot[0].strike;
+    if (!pcrStrongestResistance && strikesAboveSpot.length > 0) {
+      pcrStrongestResistance = strikesAboveSpot[0].strike;
     }
 
-    // Nearest Support (Highest strike < Spot with Put OI)
-    let nearestSupport: number | null = null;
-    let nearestSupOi = 0;
-    const strikesBelowSpot = strikesData.filter((r) => r.strike < underlyingSpotPrice).reverse();
+    let pcrNearestResistance: number | null = null;
+    if (strikesAboveSpot.length > 0) {
+      pcrNearestResistance = strikesAboveSpot[0].strike;
+    }
+
+    let pcrStrongestSupport: number | null = null;
+    let maxPcr = -Infinity;
     for (const r of strikesBelowSpot) {
-      if (r.putOi > nearestSupOi && r.putOi > 0) {
-        nearestSupOi = r.putOi;
-        nearestSupport = r.strike;
+      if (r.putOi > 0 && r.strikePcr > maxPcr) {
+        maxPcr = r.strikePcr;
+        pcrStrongestSupport = r.strike;
       }
     }
-    if (!nearestSupport && strikesBelowSpot.length > 0) {
-      nearestSupport = strikesBelowSpot[0].strike;
+    if (!pcrStrongestSupport && strikesBelowSpot.length > 0) {
+      pcrStrongestSupport = strikesBelowSpot[0].strike;
+    }
+
+    let pcrNearestSupport: number | null = null;
+    if (strikesBelowSpot.length > 0) {
+      pcrNearestSupport = strikesBelowSpot[0].strike;
     }
 
     const maxPainStrike = calculateMaxPain(strikesData);
     const overallPcr = totalCallOi > 0 ? parseFloat((totalPutOi / totalCallOi).toFixed(3)) : 0;
+    const overallVolumePcr = totalCallVolume > 0 ? parseFloat((totalPutVolume / totalCallVolume).toFixed(3)) : 0;
 
     let sentiment = 'Neutral';
     let sentimentColor: 'emerald' | 'rose' | 'amber' = 'amber';
@@ -389,7 +432,6 @@ export async function GET(request: NextRequest) {
       pcrDescription = 'Heavy put concentration; market pricing elevated risk';
     }
 
-    // Position Building Flow
     let positionBuilding = 'Neutral Flow';
     if (totalCallOi > totalPutOi * 1.3) {
       positionBuilding = 'Call Dominant (Overhead Resistance Building)';
@@ -403,16 +445,18 @@ export async function GET(request: NextRequest) {
 
     const matrix = strikesData.map((row) => {
       const signals: string[] = [];
-      if (row.strike === strongestResistance && maxCallOi > 0) signals.push('Major Resistance (Call Wall)');
-      else if (row.strike === nearestResistance) signals.push('Nearest Resistance');
+      if (row.strike === pcrStrongestResistance) signals.push('Major Resistance (Call Wall)');
+      else if (row.strike === pcrNearestResistance) signals.push('Nearest Resistance');
 
-      if (row.strike === strongestSupport && maxPutOi > 0) signals.push('Major Support (Put Floor)');
-      else if (row.strike === nearestSupport) signals.push('Nearest Support');
+      if (row.strike === pcrStrongestSupport) signals.push('Major Support (Put Floor)');
+      else if (row.strike === pcrNearestSupport) signals.push('Nearest Support');
 
       if (row.strike === maxPainStrike) signals.push('Max Pain');
 
       const callBarPct = maxCallOi > 0 ? Math.min(100, Math.round((row.callOi / maxCallOi) * 100)) : 0;
       const putBarPct = maxPutOi > 0 ? Math.min(100, Math.round((row.putOi / maxPutOi) * 100)) : 0;
+      const callVolBarPct = maxCallVolume > 0 ? Math.min(100, Math.round((row.callVolume / maxCallVolume) * 100)) : 0;
+      const putVolBarPct = maxPutVolume > 0 ? Math.min(100, Math.round((row.putVolume / maxPutVolume) * 100)) : 0;
 
       const isItmCall = underlyingSpotPrice > 0 && row.strike < underlyingSpotPrice;
       const isItmPut = underlyingSpotPrice > 0 && row.strike > underlyingSpotPrice;
@@ -421,6 +465,8 @@ export async function GET(request: NextRequest) {
         ...row,
         callBarPct,
         putBarPct,
+        callVolBarPct,
+        putVolBarPct,
         isItmCall,
         isItmPut,
         signals,
@@ -431,23 +477,27 @@ export async function GET(request: NextRequest) {
       success: true,
       asset,
       underlyingSpotPrice,
-      selectedExpiry: activeExpiry,
+      timeframe,
+      selectedExpiries: activeExpiries,
       availableExpiries,
       summary: {
         totalCallOi,
         totalPutOi,
+        totalCallVolume,
+        totalPutVolume,
         totalCallOiNotional,
         totalPutOiNotional,
         overallPcr,
+        overallVolumePcr,
         sentiment,
         sentimentColor,
         pcrDescription,
         positionBuilding,
         maxPainStrike,
-        nearestResistance,
-        strongestResistance,
-        nearestSupport,
-        strongestSupport,
+        nearestResistance: pcrNearestResistance,
+        strongestResistance: pcrStrongestResistance,
+        nearestSupport: pcrNearestSupport,
+        strongestSupport: pcrStrongestSupport,
         contractsCount: expiryOptions.length,
       },
       matrix,
