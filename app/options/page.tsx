@@ -22,7 +22,7 @@ export default function OptionsPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-            <span className="hidden sm:inline">DELTA EXCHANGE FEED</span>
+            <span className="hidden sm:inline">TCT</span>
             <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
               REAL-TIME
             </span>
