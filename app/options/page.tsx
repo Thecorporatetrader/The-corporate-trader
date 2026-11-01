@@ -1,4 +1,3 @@
-
 import type { Metadata } from 'next';
 import OptionsMatrix from '@/components/OptionsMatrix';
 
@@ -12,9 +11,9 @@ export const dynamic = 'force-dynamic';
 
 export default function OptionsPage() {
   return (
-    <main className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col">
-      {/* Mobile App & Chrome Extension Optimized Header */}
-      <header className="border-b border-slate-800/80 bg-[#090d15]/90 backdrop-blur px-4 py-3 sticky top-0 z-40">
+    <main className="h-screen w-screen overflow-hidden bg-[#07090e] text-slate-100 flex flex-col">
+      {/* 1. FIXED TOP HEADER: Pinned permanently at top */}
+      <header className="border-b border-slate-800/80 bg-[#090d15]/95 backdrop-blur px-4 py-3 shrink-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400/80" />
@@ -31,15 +30,12 @@ export default function OptionsPage() {
         </div>
       </header>
 
-      {/* Main Options Container */}
-      <div className="flex-1 w-full max-w-7xl mx-auto p-3 sm:p-5 lg:p-6">
-        <OptionsMatrix initialAsset="BTC" className="w-full" />
+      {/* 2. DEDICATED SCROLLING CONTAINER: Only below content scrolls */}
+      <div className="flex-1 w-full overflow-y-auto p-3 sm:p-5 lg:p-6 custom-scrollbar">
+        <div className="max-w-7xl mx-auto pb-12">
+          <OptionsMatrix initialAsset="BTC" className="w-full" />
+        </div>
       </div>
-
-      {/* Footer for App / Extension WebView */}
-      <footer className="border-t border-slate-900 bg-[#070a10] px-4 py-3 text-center text-[10px] font-mono text-slate-500">
-        The Corporate Trader © {new Date().getFullYear()} · Real-Time Institutional Crypto Derivatives Analytics
-      </footer>
     </main>
   );
 }
