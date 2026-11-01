@@ -7,7 +7,15 @@ import {
   Activity,
   Calendar,
   AlertTriangle,
+  Shield,
+  Layers,
   Compass,
+  Target,
+  Zap,
+  BarChart2,
+  Check,
+  Clock,
+  Crosshair,
 } from 'lucide-react';
 
 interface OptionMetrics {
@@ -18,6 +26,7 @@ interface OptionMetrics {
   oiChangePct: number;
   markPrice: number;
   volume: number;
+  volumeChangePct?: number;
   notional: number;
 }
 
@@ -25,9 +34,14 @@ interface MatrixRow {
   strike: number;
   callOi: number;
   putOi: number;
+  callVolume: number;
+  putVolume: number;
   strikePcr: number;
+  volumePcr: number;
   callBarPct: number;
   putBarPct: number;
+  callVolBarPct?: number;
+  putVolBarPct?: number;
   isItmCall: boolean;
   isItmPut: boolean;
   signals: string[];
@@ -38,9 +52,12 @@ interface MatrixRow {
 interface OptionsSummary {
   totalCallOi: number;
   totalPutOi: number;
+  totalCallVolume?: number;
+  totalPutVolume?: number;
   totalCallOiNotional: number;
   totalPutOiNotional: number;
   overallPcr: number;
+  overallVolumePcr?: number;
   sentiment: string;
   sentimentColor: 'emerald' | 'rose' | 'amber';
   pcrDescription: string;
@@ -57,7 +74,8 @@ interface OptionsApiResponse {
   success: boolean;
   asset: string;
   underlyingSpotPrice: number;
-  selectedExpiry: string | null;
+  selectedExpiries?: string[];
+  selectedExpiry?: string | null;
   availableExpiries: string[];
   summary: OptionsSummary;
   matrix: MatrixRow[];
@@ -73,7 +91,12 @@ interface OptionsMatrixProps {
 
 export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: OptionsMatrixProps) {
   const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL' | 'XAUT'>(initialAsset);
-  const [selectedExpiry, setSelectedExpiry] = useState<string>('');
+  const [selectedExpiries, setSelectedExpiries] = useState<string[]>([]);
+  const [expiryDropdownOpen, setExpiryDropdownOpen] = useState<boolean>(false);
+  const [matrixViewMode, setMatrixViewMode] = useState<'all' | 'oi' | 'volume'>('all');
+  const [timeframe, setTimeframe] = useState<'15m' | '1h' | '2h' | '4h' | '12h'>('1h');
+  const [activeDiagram, setActiveDiagram] = useState<'corridor' | 'oi-shift' | 'volume-surge' | 'pcr-curve'>('corridor');
+
   const [data, setData] = useState<OptionsApiResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +108,17 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
   const POLLING_INTERVAL_SEC = 10;
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setExpiryDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchData = useCallback(
     async (isBackground = false) => {
@@ -94,7 +128,8 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
       try {
         const queryParams = new URLSearchParams({
           asset,
-          ...(selectedExpiry ? { expiry: selectedExpiry } : {}),
+          timeframe,
+          ...(selectedExpiries.length > 0 ? { expiry: selectedExpiries.join(',') } : {}),
         });
 
         const res = await fetch(`/api/options?${queryParams.toString()}`);
@@ -116,8 +151,8 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         setData(json);
         setLastRefreshed(new Date());
 
-        if (!selectedExpiry && json.availableExpiries && json.availableExpiries.length > 0) {
-          setSelectedExpiry(json.selectedExpiry || json.availableExpiries[0]);
+        if (selectedExpiries.length === 0 && json.availableExpiries && json.availableExpiries.length > 0) {
+          setSelectedExpiries([json.availableExpiries[0]]);
         }
       } catch (err: any) {
         console.error('Options Matrix Error:', err);
@@ -127,7 +162,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         setCountdown(POLLING_INTERVAL_SEC);
       }
     },
-    [asset, selectedExpiry]
+    [asset, selectedExpiries, timeframe]
   );
 
   useEffect(() => {
@@ -154,6 +189,27 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, [autoRefresh, fetchData]);
+
+  const toggleExpiry = (exp: string) => {
+    setSelectedExpiries((prev) => {
+      if (exp === 'all') {
+        return prev.includes('all') ? [] : ['all'];
+      }
+      const filtered = prev.filter((item) => item !== 'all');
+      if (filtered.includes(exp)) {
+        const next = filtered.filter((item) => item !== exp);
+        return next.length === 0 && data?.availableExpiries?.length ? [data.availableExpiries[0]] : next;
+      } else {
+        return [...filtered, exp];
+      }
+    });
+  };
+
+  const selectAllExpiries = () => {
+    if (data?.availableExpiries) {
+      setSelectedExpiries(data.availableExpiries);
+    }
+  };
 
   const formatUSD = (num: number | undefined | null) => {
     if (!num && num !== 0) return '$0';
@@ -189,6 +245,152 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
   const summary = data?.summary;
   const spotPrice = data?.underlyingSpotPrice || 0;
 
+  const flowAnalytics = useMemo(() => {
+    if (!data?.matrix || data.matrix.length === 0) return null;
+
+    let netCallOiChange = 0;
+    let netPutOiChange = 0;
+    let topCallAdditionStrike: number | null = null;
+    let topPutAdditionStrike: number | null = null;
+    let topCallVolumeStrike: number | null = null;
+    let topPutVolumeStrike: number | null = null;
+    let maxCallChg = -Infinity;
+    let maxPutChg = -Infinity;
+    let maxCallVol = -Infinity;
+    let maxPutVol = -Infinity;
+
+    for (const r of data.matrix) {
+      const cChg = r.call?.oiChangePct || 0;
+      const pChg = r.put?.oiChangePct || 0;
+      const cVol = r.callVolume || 0;
+      const pVol = r.putVolume || 0;
+
+      netCallOiChange += cChg;
+      netPutOiChange += pChg;
+
+      if (cChg > maxCallChg) {
+        maxCallChg = cChg;
+        topCallAdditionStrike = r.strike;
+      }
+      if (pChg > maxPutChg) {
+        maxPutChg = pChg;
+        topPutAdditionStrike = r.strike;
+      }
+      if (cVol > maxCallVol) {
+        maxCallVol = cVol;
+        topCallVolumeStrike = r.strike;
+      }
+      if (pVol > maxPutVol) {
+        maxPutVol = pVol;
+        topPutVolumeStrike = r.strike;
+      }
+    }
+
+    const netOiVelocity = netPutOiChange - netCallOiChange;
+    const flowDirection =
+      netOiVelocity > 5
+        ? 'BULLISH FLOW (Put Writing / Support Defense)'
+        : netOiVelocity < -5
+        ? 'BEARISH FLOW (Call Writing / Overhead Capping)'
+        : 'NEUTRAL ACCUMULATION';
+
+    return {
+      netCallOiChange,
+      netPutOiChange,
+      topCallAdditionStrike,
+      topPutAdditionStrike,
+      topCallVolumeStrike,
+      topPutVolumeStrike,
+      flowDirection,
+      netOiVelocity,
+    };
+  }, [data?.matrix]);
+
+  // Pure Options Trade Engine: Strictly based on Volume, Strike OI, Walls & PCR
+  const tradeSetup = useMemo(() => {
+    if (!summary || !spotPrice || spotPrice === 0) return null;
+
+    const nearestSup = summary.nearestSupport || spotPrice * 0.98;
+    const strongestSup = summary.strongestSupport || spotPrice * 0.95;
+    const nearestRes = summary.nearestResistance || spotPrice * 1.02;
+    const strongestRes = summary.strongestResistance || spotPrice * 1.05;
+    const maxPain = summary.maxPainStrike || spotPrice;
+    const overallPcr = summary.overallPcr;
+    const volPcr = summary.overallVolumePcr || overallPcr;
+    const netVelocity = flowAnalytics?.netOiVelocity || 0;
+
+    let bias: 'LONG' | 'SHORT' | 'RANGE';
+    let strategy: string;
+    let confidence: number;
+    let entryZone: string;
+    let stopLoss: number;
+    let target1: number;
+    let target2: number;
+    let reasoning: string;
+
+    const isNearSupport = (spotPrice - nearestSup) / spotPrice < 0.015;
+    const isNearResistance = (nearestRes - spotPrice) / spotPrice < 0.015;
+
+    if (overallPcr < 0.80 || (netVelocity > 4 && volPcr > 0.8)) {
+      bias = 'LONG';
+      strategy = isNearSupport
+        ? 'Put Support Bounce (Strike PCR High Floor Defense)'
+        : 'Bullish Momentum Expansion (Low Overall PCR < 0.80)';
+      confidence = overallPcr < 0.65 ? 93 : 84;
+      entryZone = `$${formatNumber(nearestSup, 0)} – $${formatNumber(spotPrice, 0)}`;
+      stopLoss = Math.round(strongestSup * 0.995);
+      target1 = Math.round(maxPain > spotPrice ? maxPain : nearestRes);
+      target2 = Math.round(strongestRes);
+      reasoning = `Heavy Put Open Interest defense at $${formatNumber(nearestSup, 0)} with low overall PCR (${overallPcr.toFixed(2)}). Inflow velocity favors upside expansion toward Call Wall ($${formatNumber(strongestRes, 0)}).`;
+    } else if (overallPcr > 1.15 || (netVelocity < -4 && volPcr < 0.9)) {
+      bias = 'SHORT';
+      strategy = isNearResistance
+        ? 'Call Resistance Fade (Heavy Call Wall Overhead)'
+        : 'Bearish Breakdown (Excess Put Hedging / Call Supply)';
+      confidence = overallPcr > 1.35 ? 91 : 82;
+      entryZone = `$${formatNumber(spotPrice, 0)} – $${formatNumber(nearestRes, 0)}`;
+      stopLoss = Math.round(strongestRes * 1.005);
+      target1 = Math.round(maxPain < spotPrice ? maxPain : nearestSup);
+      target2 = Math.round(strongestSup);
+      reasoning = `Massive Call Open Interest capping at $${formatNumber(nearestRes, 0)} alongside elevated PCR (${overallPcr.toFixed(2)}). Sellers defending strikes against upward breakouts.`;
+    } else {
+      bias = 'RANGE';
+      strategy = 'Max Pain Pinning & Range Scalp';
+      confidence = 75;
+      entryZone = `Buy @ $${formatNumber(nearestSup, 0)} / Sell @ $${formatNumber(nearestRes, 0)}`;
+      stopLoss = Math.round(strongestSup * 0.99);
+      target1 = Math.round(maxPain);
+      target2 = Math.round(nearestRes);
+      reasoning = `Balanced Call and Put OI distribution (PCR ${overallPcr.toFixed(2)}). Price expected to oscillate between nearest support/resistance and gravitate toward Max Pain ($${formatNumber(maxPain, 0)}).`;
+    }
+
+    const risk = Math.abs(spotPrice - stopLoss);
+    const reward = Math.abs(target2 - spotPrice);
+    const rrRatio = risk > 0 ? (reward / risk).toFixed(2) : '2.50';
+
+    return {
+      bias,
+      strategy,
+      confidence,
+      entryZone,
+      stopLoss,
+      target1,
+      target2,
+      rrRatio,
+      reasoning,
+      overallPcr,
+      volPcr,
+    };
+  }, [summary, spotPrice, flowAnalytics]);
+
+  const tunnelPosition = useMemo(() => {
+    const minBound = summary?.strongestSupport || spotPrice * 0.95;
+    const maxBound = summary?.strongestResistance || spotPrice * 1.05;
+    if (maxBound <= minBound) return 50;
+    const pos = ((spotPrice - minBound) / (maxBound - minBound)) * 100;
+    return Math.max(4, Math.min(96, Math.round(pos)));
+  }, [summary?.strongestSupport, summary?.strongestResistance, spotPrice]);
+
   return (
     <div
       className={`w-full bg-[#0a0d14] text-slate-100 rounded-xl border border-slate-800 shadow-2xl p-4 md:p-6 font-sans ${className}`}
@@ -202,7 +404,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold tracking-tight text-white font-mono">
-                OPTIONS MARKET STRUCTURE MATRIX
+                OPTIONS MARKET STRUCTURE & TRADE RADAR
               </h2>
               <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 LIVE
@@ -214,21 +416,21 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
               )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Live Open Interest Distribution, PCR Sentiment, Volatility Walls & Position Buildup via Delta Exchange
+              Trade Setups, Multi-Expiry Aggregation, Strike Volume vs. Open Interest Flow & Delta Exchange Feed
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Asset Pills with XAUT support */}
+          {/* Asset Switcher */}
           <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
             {(['BTC', 'ETH', 'SOL', 'XAUT'] as const).map((token) => (
               <button
                 key={token}
                 onClick={() => {
                   setAsset(token);
-                  setSelectedExpiry('');
+                  setSelectedExpiries([]);
                 }}
                 className={`px-3 py-1.5 text-xs font-mono font-bold rounded-md transition-all ${
                   asset === token
@@ -241,29 +443,102 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
             ))}
           </div>
 
-          {/* Expiry Selector */}
-          <div className="relative">
-            <select
-              value={selectedExpiry}
-              onChange={(e) => setSelectedExpiry(e.target.value)}
-              className="bg-slate-900 text-slate-200 text-xs font-mono border border-slate-800 rounded-lg px-3 py-2 pr-8 focus:outline-none focus:border-cyan-500 appearance-none cursor-pointer"
-            >
-              {data?.availableExpiries && data.availableExpiries.length > 0 ? (
-                data.availableExpiries.map((exp) => (
-                  <option key={exp} value={exp}>
-                    EXP: {exp}
-                  </option>
-                ))
-              ) : (
-                <option value="">No Expiry Data</option>
-              )}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-              <Calendar className="w-3.5 h-3.5" />
-            </div>
+          {/* Timeframe Selector */}
+          <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg items-center">
+            <span className="text-[10px] text-slate-500 font-mono px-1 flex items-center gap-0.5">
+              <Clock className="w-3 h-3 text-cyan-400" />
+            </span>
+            {(['15m', '1h', '2h', '4h', '12h'] as const).map((tf) => (
+              <button
+                key={tf}
+                onClick={() => setTimeframe(tf)}
+                className={`px-2 py-1 text-[11px] font-mono font-bold rounded transition-all ${
+                  timeframe === tf
+                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title={`Track shifts over the last ${tf}`}
+              >
+                {tf}
+              </button>
+            ))}
           </div>
 
-          {/* Polling & Refresh */}
+          {/* Multi-Expiry Selector Dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setExpiryDropdownOpen(!expiryDropdownOpen)}
+              className="flex items-center gap-2 bg-slate-900 text-slate-200 text-xs font-mono border border-slate-800 hover:border-slate-700 rounded-lg px-3 py-2 transition-colors"
+            >
+              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+              <span>
+                {selectedExpiries.length === 0
+                  ? 'Select Expiry'
+                  : selectedExpiries.length === 1
+                  ? `EXP: ${selectedExpiries[0]}`
+                  : selectedExpiries.includes('all') || selectedExpiries.length === data?.availableExpiries?.length
+                  ? `ALL EXPIRIES (${data?.availableExpiries?.length || 0})`
+                  : `${selectedExpiries.length} Expiries Combined`}
+              </span>
+              <span className="text-slate-500 text-[10px]">▼</span>
+            </button>
+
+            {expiryDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-lg shadow-2xl p-2 z-50">
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[11px] font-mono text-slate-400">
+                  <span>Select Multiple Expiries:</span>
+                  <button
+                    onClick={selectAllExpiries}
+                    className="text-cyan-400 hover:underline font-semibold"
+                  >
+                    Select All
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {data?.availableExpiries && data.availableExpiries.length > 0 ? (
+                    data.availableExpiries.map((exp) => {
+                      const isSelected = selectedExpiries.includes(exp) || selectedExpiries.includes('all');
+                      return (
+                        <button
+                          key={exp}
+                          onClick={() => toggleExpiry(exp)}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-mono transition-colors ${
+                            isSelected
+                              ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-500/40'
+                              : 'text-slate-400 hover:bg-slate-900 hover:text-white'
+                          }`}
+                        >
+                          <span>{exp}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="text-xs text-slate-500 p-2">No expiries found</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Matrix View Toggle */}
+          <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
+            {(['all', 'oi', 'volume'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setMatrixViewMode(mode)}
+                className={`px-2.5 py-1 text-[11px] font-mono uppercase font-semibold rounded ${
+                  matrixViewMode === mode
+                    ? 'bg-slate-800 text-cyan-300 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {mode === 'all' ? 'Combined' : mode.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Refresh Controls */}
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
             <button
               onClick={() => setAutoRefresh(!autoRefresh)}
@@ -287,23 +562,127 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         </div>
       </div>
 
-      {/* Warning/Error Banner */}
-      {error && (
-        <div className="mt-3 p-3 bg-rose-950/40 border border-rose-500/30 rounded-lg flex items-center justify-between text-xs text-rose-300">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>{error}</span>
-          </div>
-          <button
-            onClick={() => fetchData(false)}
-            className="px-2 py-0.5 bg-rose-900/60 hover:bg-rose-800 rounded font-semibold text-[11px] transition-colors"
-          >
-            Retry Now
-          </button>
+      {/* Active Expiries Pill Bar */}
+      {selectedExpiries.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
+          <span className="text-slate-500 mr-1">Active Expiries:</span>
+          {selectedExpiries.map((exp) => (
+            <span
+              key={exp}
+              className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 flex items-center gap-1"
+            >
+              {exp}
+              {selectedExpiries.length > 1 && (
+                <button
+                  onClick={() => toggleExpiry(exp)}
+                  className="hover:text-rose-400 ml-0.5"
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+          {selectedExpiries.length > 1 && (
+            <span className="text-slate-400 font-semibold ml-1">
+              (Aggregated Open Interest & Volume across {selectedExpiries.length} dates)
+            </span>
+          )}
         </div>
       )}
 
-      {/* Metric Overview Cards */}
+      {/* 1. ACTIONABLE TRADE SUGGESTIONS & EXECUTION ENGINE */}
+      {tradeSetup && (
+        <div className="mt-4 p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/40 rounded-xl relative overflow-hidden font-mono shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+            <div className="flex items-center gap-2">
+              <Crosshair className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-100">
+                OPTIONS MARKET STRUCTURE & TRADE SUGGESTION ({asset})
+              </span>
+              <span
+                className={`px-2 py-0.5 text-[10px] font-black rounded ${
+                  tradeSetup.bias === 'LONG'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : tradeSetup.bias === 'SHORT'
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                }`}
+              >
+                {tradeSetup.bias} SETUP
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
+                OI PCR: <strong className="text-cyan-400">{tradeSetup.overallPcr.toFixed(2)}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
+                Vol PCR: <strong className="text-amber-400">{tradeSetup.volPcr.toFixed(2)}</strong>
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="text-slate-400">R:R:</span>
+              <span className="text-cyan-300 font-bold">1:{tradeSetup.rrRatio}</span>
+            </div>
+          </div>
+
+          {/* 4 Trade Milestone Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg">
+              <div className="text-[10px] text-slate-400 uppercase font-semibold">Structure Strategy</div>
+              <div className="text-xs font-bold text-white mt-1 leading-snug">
+                {tradeSetup.strategy}
+              </div>
+              <div className="text-[9px] text-slate-500 mt-1 truncate">
+                Driven by Strike & Volume PCR
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg">
+              <div className="text-[10px] text-cyan-400 uppercase font-semibold">Optimal Entry Zone</div>
+              <div className="text-xs font-bold text-cyan-300 mt-1">
+                {tradeSetup.entryZone}
+              </div>
+              <div className="text-[9px] text-slate-500 mt-1">
+                Nearest Support/Resistance Level
+              </div>
+            </div>
+
+            <div className="p-3 bg-rose-950/20 border border-rose-500/30 rounded-lg">
+              <div className="text-[10px] text-rose-400 uppercase font-semibold flex items-center justify-between">
+                <span>Stop Loss (SL)</span>
+                <span className="text-[9px] text-rose-500">INVALIDATION</span>
+              </div>
+              <div className="text-sm font-extrabold text-rose-300 mt-1">
+                ${formatNumber(tradeSetup.stopLoss, asset === 'XAUT' ? 1 : 0)}
+              </div>
+              <div className="text-[9px] text-slate-500 mt-1">
+                Beyond Major Put Floor / Call Wall
+              </div>
+            </div>
+
+            <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 rounded-lg">
+              <div className="text-[10px] text-emerald-400 uppercase font-semibold flex items-center justify-between">
+                <span>Take Profit Targets</span>
+                <span className="text-[9px] text-emerald-500">MAX PAIN / RES</span>
+              </div>
+              <div className="text-xs font-bold text-emerald-300 mt-1 flex items-center justify-between">
+                <span>TP1: ${formatNumber(tradeSetup.target1, 0)}</span>
+                <span className="text-emerald-400 font-extrabold">TP2: ${formatNumber(tradeSetup.target2, 0)}</span>
+              </div>
+              <div className="text-[9px] text-slate-500 mt-1">
+                Targeting Max Pain & Major Wall
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center gap-2 text-[11px] text-slate-400">
+            <span className="text-cyan-400 font-semibold shrink-0">Structure Flow Thesis:</span>
+            <span>{tradeSetup.reasoning}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 2. OVERVIEW METRIC CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
         {/* Total Call OI */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between relative overflow-hidden">
@@ -343,7 +722,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           </div>
         </div>
 
-        {/* Overall Put-Call Ratio (PCR) & Directional Sentiment */}
+        {/* Overall Put-Call Ratio (PCR) */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between relative overflow-hidden">
           <div
             className={`absolute top-0 left-0 w-1 h-full ${
@@ -378,7 +757,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           </div>
         </div>
 
-        {/* Max Pain Strike & Pin Level */}
+        {/* Max Pain Strike */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500" />
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
@@ -403,80 +782,290 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         </div>
       </div>
 
-      {/* Nearest & Strongest Support / Resistance & Position Flow Banner */}
-      <div className="mt-3 py-2.5 px-3.5 bg-slate-900/70 border border-slate-800 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          {/* Resistances */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-              <span className="text-slate-400">Nearest Res:</span>
-              <span className="text-emerald-300 font-bold">
-                ${formatNumber(summary?.nearestResistance, 0)}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Strongest Res (Call Wall):</span>
-              <span className="text-emerald-400 font-extrabold underline decoration-emerald-500/50">
-                ${formatNumber(summary?.strongestResistance, 0)}
-              </span>
-            </div>
-          </div>
-
-          {/* Supports */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-rose-400" />
-              <span className="text-slate-400">Nearest Sup:</span>
-              <span className="text-rose-300 font-bold">
-                ${formatNumber(summary?.nearestSupport, 0)}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">Strongest Sup (Put Floor):</span>
-              <span className="text-rose-400 font-extrabold underline decoration-rose-500/50">
-                ${formatNumber(summary?.strongestSupport, 0)}
-              </span>
-            </div>
-          </div>
-
-          {/* Position Flow */}
-          {summary?.positionBuilding && (
-            <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
-              <Compass className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-slate-400">Flow:</span>
-              <span className="text-cyan-300 font-semibold">{summary.positionBuilding}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search Strike..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 pl-6 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500 w-32"
-            />
-            <Search className="w-3 h-3 text-slate-500 absolute left-1.5 top-1.5 pointer-events-none" />
-          </div>
-          {lastRefreshed && (
-            <span className="text-[10px] text-slate-500">
-              Synced: {lastRefreshed.toLocaleTimeString()}
+      {/* 3. INTERACTIVE DIAGRAMS HUB */}
+      <div className="mt-4 p-4 bg-slate-950 border border-slate-800 rounded-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-3 border-b border-slate-800/80 gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">
+              {activeDiagram === 'corridor' && 'Market Structure Corridor (S/R Tunnel)'}
+              {activeDiagram === 'oi-shift' && `Recent Open Interest Shift (${timeframe})`}
+              {activeDiagram === 'volume-surge' && `Strike Volume Surge Flow (${timeframe})`}
+              {activeDiagram === 'pcr-curve' && 'Strike-Level PCR Curve & S/R Pinning'}
             </span>
-          )}
+            <span className="text-[10px] text-slate-500 font-mono">
+              Horizon: {timeframe}
+            </span>
+          </div>
+
+          <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
+            <button
+              onClick={() => setActiveDiagram('corridor')}
+              className={`px-2.5 py-1 text-[11px] font-mono font-semibold rounded transition-all ${
+                activeDiagram === 'corridor'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              S/R Corridor
+            </button>
+            <button
+              onClick={() => setActiveDiagram('oi-shift')}
+              className={`px-2.5 py-1 text-[11px] font-mono font-semibold rounded transition-all ${
+                activeDiagram === 'oi-shift'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              OI Shift
+            </button>
+            <button
+              onClick={() => setActiveDiagram('volume-surge')}
+              className={`px-2.5 py-1 text-[11px] font-mono font-semibold rounded transition-all ${
+                activeDiagram === 'volume-surge'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Volume Surge
+            </button>
+            <button
+              onClick={() => setActiveDiagram('pcr-curve')}
+              className={`px-2.5 py-1 text-[11px] font-mono font-semibold rounded transition-all ${
+                activeDiagram === 'pcr-curve'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Strike PCR Curve
+            </button>
+          </div>
         </div>
+
+        {/* VIEW 1: CORRIDOR S/R TUNNEL */}
+        {activeDiagram === 'corridor' && (
+          <div className="w-full px-2">
+            <div className="relative w-full h-4 bg-slate-950 rounded-full border border-slate-800 flex items-center my-6">
+              <div className="absolute left-0 w-1/4 h-full bg-rose-500/20 rounded-l-full" />
+              <div className="absolute right-0 w-1/4 h-full bg-emerald-500/20 rounded-r-full" />
+              {summary?.maxPainStrike && (
+                <div
+                  className="absolute w-1.5 h-6 bg-cyan-400 rounded-sm z-10 shadow-lg shadow-cyan-500/50 -top-1"
+                  style={{ left: '50%' }}
+                  title={`Max Pain: $${formatNumber(summary.maxPainStrike, 0)}`}
+                />
+              )}
+              <div
+                className="absolute -top-3.5 transition-all duration-700 z-20 flex flex-col items-center -ml-3"
+                style={{ left: `${tunnelPosition}%` }}
+              >
+                <div className="px-2 py-0.5 rounded bg-cyan-400 text-slate-950 font-mono font-black text-[10px] shadow-lg shadow-cyan-400/40 whitespace-nowrap">
+                  SPOT ${formatNumber(spotPrice, 0)}
+                </div>
+                <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-cyan-400" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 mt-4 text-center font-mono">
+              <div className="p-2 bg-rose-950/20 border border-rose-500/30 rounded-lg">
+                <div className="text-[10px] text-rose-400 font-bold uppercase flex items-center justify-center gap-1">
+                  <Shield className="w-3 h-3" /> Strongest Floor (PCR)
+                </div>
+                <div className="text-sm font-black text-rose-300 mt-0.5">
+                  ${formatNumber(summary?.strongestSupport, asset === 'XAUT' ? 1 : 0)}
+                </div>
+                <div className="text-[9px] text-slate-500">Max Put PCR Inflow</div>
+              </div>
+
+              <div className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase">Nearest Support (PCR)</div>
+                <div className="text-sm font-bold text-slate-200 mt-0.5">
+                  ${formatNumber(summary?.nearestSupport, asset === 'XAUT' ? 1 : 0)}
+                </div>
+                <div className="text-[9px] text-slate-500">First Put Bid Cluster</div>
+              </div>
+
+              <div className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg">
+                <div className="text-[10px] text-slate-400 font-semibold uppercase">Nearest Resistance (PCR)</div>
+                <div className="text-sm font-bold text-slate-200 mt-0.5">
+                  ${formatNumber(summary?.nearestResistance, asset === 'XAUT' ? 1 : 0)}
+                </div>
+                <div className="text-[9px] text-slate-500">First Call Cap</div>
+              </div>
+
+              <div className="p-2 bg-emerald-950/20 border border-emerald-500/30 rounded-lg">
+                <div className="text-[10px] text-emerald-400 font-bold uppercase flex items-center justify-center gap-1">
+                  <Layers className="w-3 h-3" /> Strongest Ceiling (PCR)
+                </div>
+                <div className="text-sm font-black text-emerald-300 mt-0.5">
+                  ${formatNumber(summary?.strongestResistance, asset === 'XAUT' ? 1 : 0)}
+                </div>
+                <div className="text-[9px] text-slate-500">Min PCR / Heavy Call Wall</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 2: OI SHIFT */}
+        {activeDiagram === 'oi-shift' && (
+          <div className="w-full">
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-2 px-1">
+              <span className="text-emerald-400 flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-emerald-500 inline-block" /> Call OI Additions
+              </span>
+              <span className="text-slate-500">
+                Strike Distribution across {timeframe} Lookback
+              </span>
+              <span className="text-rose-400 flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded bg-rose-500 inline-block" /> Put OI Additions
+              </span>
+            </div>
+            <div className="h-44 w-full bg-slate-900/40 rounded-lg p-2 flex items-end gap-1.5 overflow-x-auto">
+              {filteredMatrix.map((r) => {
+                const callChg = Math.max(0, r.call?.oiChangePct || 0);
+                const putChg = Math.max(0, r.put?.oiChangePct || 0);
+                const maxChg = Math.max(1, ...filteredMatrix.map(m => Math.max(m.call?.oiChangePct || 0, m.put?.oiChangePct || 0)));
+                const callHeight = Math.min(100, Math.round((callChg / maxChg) * 100));
+                const putHeight = Math.min(100, Math.round((putChg / maxChg) * 100));
+                const isSpot = spotPrice > 0 && Math.abs(r.strike - spotPrice) <= (filteredMatrix[1]?.strike - filteredMatrix[0]?.strike || 500);
+
+                return (
+                  <div key={r.strike} className="flex-1 min-w-[36px] flex flex-col items-center h-full justify-end group relative">
+                    <div className="w-full flex items-end justify-center gap-0.5 h-32 mb-1">
+                      <div
+                        className="w-1/2 bg-emerald-500/80 rounded-t transition-all duration-500 group-hover:bg-emerald-400"
+                        style={{ height: `${callHeight || 4}%` }}
+                        title={`Call OI Δ: +${callChg.toFixed(1)}%`}
+                      />
+                      <div
+                        className="w-1/2 bg-rose-500/80 rounded-t transition-all duration-500 group-hover:bg-rose-400"
+                        style={{ height: `${putHeight || 4}%` }}
+                        title={`Put OI Δ: +${putChg.toFixed(1)}%`}
+                      />
+                    </div>
+                    <span className={`text-[9px] font-mono whitespace-nowrap ${isSpot ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>
+                      ${formatNumber(r.strike, 0)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 3: VOLUME SURGE */}
+        {activeDiagram === 'volume-surge' && (
+          <div className="w-full">
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-2 px-1">
+              <span className="text-cyan-400">Call Volume Flow</span>
+              <span className="text-slate-500">Normalized Trading Intensity ({timeframe})</span>
+              <span className="text-amber-400">Put Volume Flow</span>
+            </div>
+            <div className="h-44 w-full bg-slate-900/40 rounded-lg p-2 flex items-end gap-1.5 overflow-x-auto">
+              {filteredMatrix.map((r) => {
+                const maxVol = Math.max(1, ...filteredMatrix.map(m => Math.max(m.callVolume, m.putVolume)));
+                const callHeight = Math.min(100, Math.round((r.callVolume / maxVol) * 100));
+                const putHeight = Math.min(100, Math.round((r.putVolume / maxVol) * 100));
+                const isSpot = spotPrice > 0 && Math.abs(r.strike - spotPrice) <= (filteredMatrix[1]?.strike - filteredMatrix[0]?.strike || 500);
+
+                return (
+                  <div key={r.strike} className="flex-1 min-w-[36px] flex flex-col items-center h-full justify-end group">
+                    <div className="w-full flex items-end justify-center gap-0.5 h-32 mb-1">
+                      <div
+                        className="w-1/2 bg-cyan-500/80 rounded-t transition-all duration-500 group-hover:bg-cyan-300"
+                        style={{ height: `${callHeight || 4}%` }}
+                        title={`Call Vol: ${r.callVolume}`}
+                      />
+                      <div
+                        className="w-1/2 bg-amber-500/80 rounded-t transition-all duration-500 group-hover:bg-amber-300"
+                        style={{ height: `${putHeight || 4}%` }}
+                        title={`Put Vol: ${r.putVolume}`}
+                      />
+                    </div>
+                    <span className={`text-[9px] font-mono whitespace-nowrap ${isSpot ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>
+                      ${formatNumber(r.strike, 0)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW 4: PCR CURVE */}
+        {activeDiagram === 'pcr-curve' && (
+          <div className="w-full">
+            <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 mb-2 px-1">
+              <span className="text-rose-400 font-semibold">▲ High PCR (&gt;1.4): Put Support Floor</span>
+              <span className="text-slate-500">Strike-Level PCR Curve with S/R Pinning</span>
+              <span className="text-emerald-400 font-semibold">▼ Low PCR (&lt;0.6): Call Resistance Wall</span>
+            </div>
+            <div className="h-44 w-full bg-slate-900/40 rounded-lg p-2 relative flex items-center justify-center">
+              {filteredMatrix.length > 1 ? (
+                <svg className="w-full h-36" viewBox={`0 0 ${filteredMatrix.length * 50} 100`} preserveAspectRatio="none">
+                  <line x1="0" y1="50" x2={filteredMatrix.length * 50} y2="50" stroke="#334155" strokeDasharray="4 4" strokeWidth="1" />
+                  <polyline
+                    fill="none"
+                    stroke="#22d3ee"
+                    strokeWidth="2.5"
+                    points={filteredMatrix
+                      .map((r, i) => {
+                        const x = i * 50 + 25;
+                        const clampedPcr = Math.min(2.5, Math.max(0, r.strikePcr));
+                        const y = 85 - (clampedPcr / 2.5) * 70;
+                        return `${x},${y.toFixed(1)}`;
+                      })
+                      .join(' ')}
+                  />
+                  {filteredMatrix.map((r, i) => {
+                    const x = i * 50 + 25;
+                    const clampedPcr = Math.min(2.5, Math.max(0, r.strikePcr));
+                    const y = 85 - (clampedPcr / 2.5) * 70;
+                    const isStrongestRes = r.strike === summary?.strongestResistance;
+                    const isStrongestSup = r.strike === summary?.strongestSupport;
+
+                    return (
+                      <g key={r.strike}>
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r={isStrongestRes || isStrongestSup ? 5 : 3}
+                          fill={isStrongestRes ? '#10b981' : isStrongestSup ? '#f43f5e' : '#22d3ee'}
+                        />
+                        {isStrongestRes && (
+                          <text x={x} y={y - 8} fill="#10b981" fontSize="9" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+                            STRONG RES (${r.strike})
+                          </text>
+                        )}
+                        {isStrongestSup && (
+                          <text x={x} y={y + 16} fill="#f43f5e" fontSize="9" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+                            STRONG SUP (${r.strike})
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              ) : (
+                <div className="text-xs text-slate-500 font-mono">Insufficient strike points for curve rendering</div>
+              )}
+            </div>
+            <div className="flex justify-between px-2 mt-1 text-[9px] font-mono text-slate-500">
+              <span>Low Strikes (Oversold Puts)</span>
+              <span>At-The-Money (Equilibrium)</span>
+              <span>High Strikes (Overbought Calls)</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Options Chain Table Matrix */}
+      {/* 4. OPTIONS CHAIN TABLE MATRIX */}
       <div className="mt-4 border border-slate-800 rounded-lg overflow-hidden bg-slate-950/60">
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono border-collapse">
             <thead>
               <tr className="bg-slate-900/90 text-slate-400 uppercase text-[11px] border-b border-slate-800">
                 <th
-                  colSpan={3}
+                  colSpan={matrixViewMode === 'all' ? 4 : 3}
                   className="py-2.5 px-3 text-center text-emerald-400 border-r border-slate-800 font-bold tracking-wider"
                 >
                   ◄ CALL OPTIONS (BULLISH)
@@ -488,41 +1077,59 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                   MARKET STRUCTURE & STRIKE
                 </th>
                 <th
-                  colSpan={3}
+                  colSpan={matrixViewMode === 'all' ? 4 : 3}
                   className="py-2.5 px-3 text-center text-rose-400 font-bold tracking-wider"
                 >
                   PUT OPTIONS (BEARISH) ►
                 </th>
               </tr>
               <tr className="bg-slate-900/50 text-slate-400 text-[10px] border-b border-slate-800">
-                <th className="py-2 px-3 text-left">Call OI Depth</th>
-                <th className="py-2 px-3 text-right">Call OI (Contracts)</th>
-                <th className="py-2 px-3 text-right border-r border-slate-800">24h OI Chg</th>
+                {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                  <th className="py-2 px-3 text-left">Call OI Depth</th>
+                )}
+                {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                  <th className="py-2 px-3 text-right">Call OI (Contracts)</th>
+                )}
+                {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
+                  <th className="py-2 px-3 text-right">Call Vol</th>
+                )}
+                <th className="py-2 px-3 text-right border-r border-slate-800">
+                  Δ {timeframe} (OI / Vol)
+                </th>
 
                 <th className="py-2 px-2 text-center">Structure Signals</th>
                 <th className="py-2 px-4 text-center font-bold text-white bg-slate-900/80">Strike ($)</th>
-                <th className="py-2 px-2 text-center border-r border-slate-800">Strike PCR</th>
+                <th className="py-2 px-2 text-center border-r border-slate-800">OI / Vol PCR</th>
 
-                <th className="py-2 px-3 text-left">24h OI Chg</th>
-                <th className="py-2 px-3 text-left">Put OI (Contracts)</th>
-                <th className="py-2 px-3 text-right">Put OI Depth</th>
+                <th className="py-2 px-3 text-left">
+                  Δ {timeframe} (OI / Vol)
+                </th>
+                {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
+                  <th className="py-2 px-3 text-left">Put Vol</th>
+                )}
+                {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                  <th className="py-2 px-3 text-left">Put OI (Contracts)</th>
+                )}
+                {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                  <th className="py-2 px-3 text-right">Put OI Depth</th>
+                )}
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-800/40">
               {loading && (!data?.matrix || data.matrix.length === 0) ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
-                      <span>Loading options contracts for {asset}...</span>
+                      <span>Loading options contracts & volume for {asset}...</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredMatrix.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
-                    No active options contracts found for {asset} on {selectedExpiry || 'selected date'}.
+                  <td colSpan={11} className="py-12 text-center text-slate-400">
+                    No active options contracts found for {asset} on selected expiries.
                   </td>
                 </tr>
               ) : (
@@ -543,7 +1150,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                       {isSpotNearest && (
                         <tr className="bg-cyan-500/10 border-y-2 border-cyan-400/60">
                           <td
-                            colSpan={9}
+                            colSpan={11}
                             className="py-1 px-4 text-center text-cyan-300 font-bold text-[11px] tracking-wide"
                           >
                             ─── SPOT PRICE LEVEL: ${formatNumber(spotPrice, asset === 'XAUT' ? 2 : 0)} ───
@@ -562,25 +1169,38 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                             : ''
                         }`}
                       >
-                        <td className="py-2 px-3 w-32 relative">
-                          <div className="w-full bg-slate-900 h-2 rounded overflow-hidden">
-                            <div
-                              className="bg-emerald-500 h-full rounded transition-all duration-500"
-                              style={{ width: `${row.callBarPct}%` }}
-                            />
+                        {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                          <td className="py-2 px-3 w-28 relative">
+                            <div className="w-full bg-slate-900 h-2 rounded overflow-hidden">
+                              <div
+                                className="bg-emerald-500 h-full rounded transition-all duration-500"
+                                style={{ width: `${row.callBarPct}%` }}
+                              />
+                            </div>
+                          </td>
+                        )}
+
+                        {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                          <td className="py-2 px-3 text-right font-medium text-slate-200">
+                            {formatNumber(row.callOi, 1)}
+                          </td>
+                        )}
+
+                        {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
+                          <td className="py-2 px-3 text-right font-medium text-cyan-300">
+                            {formatNumber(row.callVolume, 1)}
+                          </td>
+                        )}
+
+                        <td className="py-2 px-3 text-right border-r border-slate-800">
+                          <div className={(row.call?.oiChangePct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                            {formatPercentChange(row.call?.oiChangePct)}
                           </div>
-                        </td>
-
-                        <td className="py-2 px-3 text-right font-medium text-slate-200">
-                          {formatNumber(row.callOi, 1)}
-                        </td>
-
-                        <td
-                          className={`py-2 px-3 text-right border-r border-slate-800 ${
-                            (row.call?.oiChangePct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                          }`}
-                        >
-                          {formatPercentChange(row.call?.oiChangePct)}
+                          {row.call?.volumeChangePct !== undefined && (
+                            <div className="text-[9px] text-slate-500">
+                              Vol: {formatPercentChange(row.call.volumeChangePct)}
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-2 px-2 text-center whitespace-nowrap">
@@ -633,30 +1253,46 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                                 : 'bg-cyan-500/10 text-cyan-300'
                             }`}
                           >
-                            {row.strikePcr}
+                            OI: {row.strikePcr}
                           </span>
-                        </td>
-
-                        <td
-                          className={`py-2 px-3 text-left ${
-                            (row.put?.oiChangePct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                          }`}
-                        >
-                          {formatPercentChange(row.put?.oiChangePct)}
-                        </td>
-
-                        <td className="py-2 px-3 text-left font-medium text-slate-200">
-                          {formatNumber(row.putOi, 1)}
-                        </td>
-
-                        <td className="py-2 px-3 w-32 relative text-right">
-                          <div className="w-full bg-slate-900 h-2 rounded overflow-hidden">
-                            <div
-                              className="bg-rose-500 h-full rounded transition-all duration-500"
-                              style={{ width: `${row.putBarPct}%` }}
-                            />
+                          <div className="text-[9px] text-slate-500 mt-0.5">
+                            Vol: {row.volumePcr}
                           </div>
                         </td>
+
+                        <td className="py-2 px-3 text-left">
+                          <div className={(row.put?.oiChangePct || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                            {formatPercentChange(row.put?.oiChangePct)}
+                          </div>
+                          {row.put?.volumeChangePct !== undefined && (
+                            <div className="text-[9px] text-slate-500">
+                              Vol: {formatPercentChange(row.put.volumeChangePct)}
+                            </div>
+                          )}
+                        </td>
+
+                        {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
+                          <td className="py-2 px-3 text-left font-medium text-cyan-300">
+                            {formatNumber(row.putVolume, 1)}
+                          </td>
+                        )}
+
+                        {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                          <td className="py-2 px-3 text-left font-medium text-slate-200">
+                            {formatNumber(row.putOi, 1)}
+                          </td>
+                        )}
+
+                        {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
+                          <td className="py-2 px-3 w-28 relative text-right">
+                            <div className="w-full bg-slate-900 h-2 rounded overflow-hidden">
+                              <div
+                                className="bg-rose-500 h-full rounded transition-all duration-500"
+                                style={{ width: `${row.putBarPct}%` }}
+                              />
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     </React.Fragment>
                   );
@@ -664,36 +1300,6 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Footer & Legend */}
-      <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-[11px] text-slate-400 font-mono gap-3">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-2 rounded bg-emerald-950/60 border border-emerald-500/40" />
-            <span>Call ITM</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-2 rounded bg-rose-950/60 border border-rose-500/40" />
-            <span>Put ITM</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
-            <span>Call Wall (Major Resistance)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded bg-rose-500" />
-            <span>Put Floor (Major Support)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded bg-cyan-400" />
-            <span>Max Pain Pin</span>
-          </div>
-        </div>
-
-        <div className="text-slate-500">
-          Source: Delta Exchange India v2 | Polling: 10s | Safe Proxy Engine
         </div>
       </div>
     </div>
