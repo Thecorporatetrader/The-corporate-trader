@@ -7,6 +7,7 @@ import {
   Activity,
   Calendar,
   AlertTriangle,
+  Compass,
 } from 'lucide-react';
 
 interface OptionMetrics {
@@ -42,9 +43,13 @@ interface OptionsSummary {
   overallPcr: number;
   sentiment: string;
   sentimentColor: 'emerald' | 'rose' | 'amber';
+  pcrDescription: string;
+  positionBuilding: string;
   maxPainStrike: number | null;
-  callWallStrike: number | null;
-  putSupportStrike: number | null;
+  nearestResistance: number | null;
+  strongestResistance: number | null;
+  nearestSupport: number | null;
+  strongestSupport: number | null;
   contractsCount: number;
 }
 
@@ -62,22 +67,22 @@ interface OptionsApiResponse {
 }
 
 interface OptionsMatrixProps {
-  initialAsset?: 'BTC' | 'ETH' | 'SOL';
+  initialAsset?: 'BTC' | 'ETH' | 'SOL' | 'XAUT';
   className?: string;
 }
 
 export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: OptionsMatrixProps) {
-  const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL'>(initialAsset);
+  const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL' | 'XAUT'>(initialAsset);
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [data, setData] = useState<OptionsApiResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-  const [countdown, setCountdown] = useState<number>(12);
+  const [countdown, setCountdown] = useState<number>(10);
   const [searchFilter, setSearchFilter] = useState<string>('');
 
-  const POLLING_INTERVAL_SEC = 12;
+  const POLLING_INTERVAL_SEC = 10;
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -209,16 +214,16 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
               )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Open Interest Distribution, PCR Sentiment & Volatility Walls via Delta Exchange India
+              Live Open Interest Distribution, PCR Sentiment, Volatility Walls & Position Buildup via Delta Exchange
             </p>
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Asset Pills */}
+          {/* Asset Pills with XAUT support */}
           <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
-            {(['BTC', 'ETH', 'SOL'] as const).map((token) => (
+            {(['BTC', 'ETH', 'SOL', 'XAUT'] as const).map((token) => (
               <button
                 key={token}
                 onClick={() => {
@@ -231,7 +236,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                     : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
               >
-                {token}
+                {token === 'XAUT' ? 'XAUT (Gold)' : token}
               </button>
             ))}
           </div>
@@ -338,13 +343,13 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           </div>
         </div>
 
-        {/* Overall Put-Call Ratio (PCR) */}
+        {/* Overall Put-Call Ratio (PCR) & Directional Sentiment */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between relative overflow-hidden">
           <div
             className={`absolute top-0 left-0 w-1 h-full ${
-              (summary?.overallPcr ?? 1) < 0.7
+              (summary?.overallPcr ?? 1) < 0.8
                 ? 'bg-emerald-500'
-                : (summary?.overallPcr ?? 1) > 1.1
+                : (summary?.overallPcr ?? 1) > 1.15
                 ? 'bg-rose-500'
                 : 'bg-amber-500'
             }`}
@@ -353,9 +358,9 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
             <span>PUT / CALL RATIO</span>
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
-                (summary?.overallPcr ?? 1) < 0.7
+                (summary?.overallPcr ?? 1) < 0.8
                   ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                  : (summary?.overallPcr ?? 1) > 1.1
+                  : (summary?.overallPcr ?? 1) > 1.15
                   ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                   : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
               }`}
@@ -367,14 +372,13 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
             <div className="text-xl font-bold font-mono text-white">
               {summary?.overallPcr ? Number(summary.overallPcr).toFixed(3) : '0.000'}
             </div>
-            <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
-              <span>Sentiment Bias:</span>
-              <span className="text-slate-200 font-semibold">{summary?.sentiment}</span>
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5 leading-tight truncate">
+              {summary?.pcrDescription || 'Balanced distribution'}
             </div>
           </div>
         </div>
 
-        {/* Max Pain Strike */}
+        {/* Max Pain Strike & Pin Level */}
         <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500" />
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
@@ -385,10 +389,10 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           </div>
           <div className="mt-2">
             <div className="text-xl font-bold font-mono text-cyan-400">
-              ${formatNumber(summary?.maxPainStrike, 0)}
+              ${formatNumber(summary?.maxPainStrike, asset === 'XAUT' ? 1 : 0)}
             </div>
             <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center justify-between">
-              <span>Spot: ${formatNumber(spotPrice, 0)}</span>
+              <span>Spot: ${formatNumber(spotPrice, asset === 'XAUT' ? 1 : 0)}</span>
               {summary?.maxPainStrike && spotPrice ? (
                 <span className="text-slate-300">
                   {(((summary.maxPainStrike - spotPrice) / spotPrice) * 100).toFixed(1)}%
@@ -399,25 +403,54 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         </div>
       </div>
 
-      {/* Structure Key Levels Banner */}
-      <div className="mt-3 py-2 px-3.5 bg-slate-900/60 border border-slate-800/80 rounded-lg flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span className="text-slate-400">Call Wall (Resistance):</span>
-            <span className="text-emerald-300 font-bold">
-              ${formatNumber(summary?.callWallStrike, 0)}
-            </span>
+      {/* Nearest & Strongest Support / Resistance & Position Flow Banner */}
+      <div className="mt-3 py-2.5 px-3.5 bg-slate-900/70 border border-slate-800 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          {/* Resistances */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-slate-400">Nearest Res:</span>
+              <span className="text-emerald-300 font-bold">
+                ${formatNumber(summary?.nearestResistance, 0)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Strongest Res (Call Wall):</span>
+              <span className="text-emerald-400 font-extrabold underline decoration-emerald-500/50">
+                ${formatNumber(summary?.strongestResistance, 0)}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-400" />
-            <span className="text-slate-400">Put Support (Floor):</span>
-            <span className="text-rose-300 font-bold">
-              ${formatNumber(summary?.putSupportStrike, 0)}
-            </span>
+
+          {/* Supports */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span className="text-slate-400">Nearest Sup:</span>
+              <span className="text-rose-300 font-bold">
+                ${formatNumber(summary?.nearestSupport, 0)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">Strongest Sup (Put Floor):</span>
+              <span className="text-rose-400 font-extrabold underline decoration-rose-500/50">
+                ${formatNumber(summary?.strongestSupport, 0)}
+              </span>
+            </div>
           </div>
+
+          {/* Position Flow */}
+          {summary?.positionBuilding && (
+            <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded border border-slate-800">
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-slate-400">Flow:</span>
+              <span className="text-cyan-300 font-semibold">{summary.positionBuilding}</span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 shrink-0">
           <div className="relative">
             <input
               type="text"
@@ -494,8 +527,10 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                 </tr>
               ) : (
                 filteredMatrix.map((row, idx) => {
-                  const isCallWall = row.strike === summary?.callWallStrike;
-                  const isPutSupport = row.strike === summary?.putSupportStrike;
+                  const isStrongestRes = row.strike === summary?.strongestResistance;
+                  const isNearestRes = row.strike === summary?.nearestResistance;
+                  const isStrongestSup = row.strike === summary?.strongestSupport;
+                  const isNearestSup = row.strike === summary?.nearestSupport;
                   const isMaxPain = row.strike === summary?.maxPainStrike;
                   const isSpotNearest =
                     spotPrice > 0 &&
@@ -511,7 +546,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                             colSpan={9}
                             className="py-1 px-4 text-center text-cyan-300 font-bold text-[11px] tracking-wide"
                           >
-                            ─── SPOT PRICE LEVEL: ${formatNumber(spotPrice, 2)} ───
+                            ─── SPOT PRICE LEVEL: ${formatNumber(spotPrice, asset === 'XAUT' ? 2 : 0)} ───
                           </td>
                         </tr>
                       )}
@@ -549,15 +584,25 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                         </td>
 
                         <td className="py-2 px-2 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            {isCallWall && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            {isStrongestRes && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-500/25 text-emerald-300 border border-emerald-500/50">
                                 CALL WALL
                               </span>
                             )}
-                            {isPutSupport && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                                PUT SUPPORT
+                            {isNearestRes && !isStrongestRes && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-950/50 text-emerald-400 border border-emerald-500/30">
+                                NEAREST RES
+                              </span>
+                            )}
+                            {isStrongestSup && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-rose-500/25 text-rose-300 border border-rose-500/50">
+                                PUT FLOOR
+                              </span>
+                            )}
+                            {isNearestSup && !isStrongestSup && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-rose-950/50 text-rose-400 border border-rose-500/30">
+                                NEAREST SUP
                               </span>
                             )}
                             {isMaxPain && (
@@ -575,17 +620,17 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                               : 'text-white'
                           }`}
                         >
-                          ${formatNumber(row.strike, 0)}
+                          ${formatNumber(row.strike, asset === 'XAUT' ? 1 : 0)}
                         </td>
 
                         <td className="py-2 px-2 text-center text-slate-300 border-r border-slate-800">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] ${
-                              row.strikePcr > 1.5
-                                ? 'bg-rose-500/10 text-rose-400'
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              row.strikePcr > 1.4
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                                 : row.strikePcr < 0.6
-                                ? 'bg-emerald-500/10 text-emerald-400'
-                                : 'text-slate-400'
+                                ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                                : 'bg-cyan-500/10 text-cyan-300'
                             }`}
                           >
                             {row.strikePcr}
@@ -635,20 +680,20 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
-            <span>Call Wall (Resistance)</span>
+            <span>Call Wall (Major Resistance)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-rose-500" />
-            <span>Put Support (Floor)</span>
+            <span>Put Floor (Major Support)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded bg-cyan-400" />
-            <span>Max Pain Strike</span>
+            <span>Max Pain Pin</span>
           </div>
         </div>
 
         <div className="text-slate-500">
-          Feed: Delta Exchange REST v2 | Polling: 12s | Server-Side Proxy
+          Source: Delta Exchange India v2 | Polling: 10s | Safe Proxy Engine
         </div>
       </div>
     </div>
