@@ -1,3 +1,8 @@
+/**
+ * Next.js App Router API Route: /api/options
+ * Target Path in Repo: app/api/options/route.ts
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
@@ -21,7 +26,6 @@ interface StrikeRow {
   put: OptionMetrics | null;
 }
 
-// In-memory cache to prevent Delta Exchange 429 rate limit triggers
 const memoryCache: {
   data: Record<string, any>;
   timestamp: Record<string, number>;
@@ -29,7 +33,7 @@ const memoryCache: {
 } = {
   data: {},
   timestamp: {},
-  TTL_MS: 10000, // 10s TTL
+  TTL_MS: 10000,
 };
 
 function generateSignature(
@@ -103,13 +107,14 @@ export async function GET(request: NextRequest) {
     Accept: 'application/json',
     'Content-Type': 'application/json',
     'User-Agent': 'TheCorporateTrader-OptionsMatrix/1.0',
+    ...(apiKey && productsSignature
+      ? {
+          'api-key': apiKey,
+          timestamp,
+          signature: productsSignature,
+        }
+      : {}),
   };
-
-  if (apiKey && productsSignature) {
-    headers['api-key'] = apiKey;
-    headers['timestamp'] = timestamp;
-    headers['signature'] = productsSignature;
-  }
 
   try {
     const productsRes = await fetch(`${BASE_URL}${productsPath}${productsQuery}`, {
@@ -124,13 +129,13 @@ export async function GET(request: NextRequest) {
           {
             ...memoryCache.data[cacheKey],
             rateLimited: true,
-            warning: 'Delta Exchange rate limit reached; displaying cached snapshot',
+            warning: 'Delta Exchange rate limit reached; displaying stale snapshot',
           },
           { headers: { 'X-Cache': 'STALE-429' } }
         );
       }
       return NextResponse.json(
-        { success: false, error: 'Delta Exchange rate limit reached (429).' },
+        { success: false, error: 'Delta Exchange API rate limit reached (429).' },
         { status: 429 }
       );
     }
@@ -152,8 +157,11 @@ export async function GET(request: NextRequest) {
         ? generateSignature(apiSecret, 'GET', tickersTimestamp, tickersPath)
         : '';
 
-      const tickerHeaders = { ...headers, timestamp: tickersTimestamp };
-      if (tickersSignature) tickerHeaders['signature'] = tickersSignature;
+      const tickerHeaders: Record<string, string> = {
+        ...headers,
+        timestamp: tickersTimestamp,
+        ...(tickersSignature ? { signature: tickersSignature } : {}),
+      };
 
       const tickersRes = await fetch(`${BASE_URL}${tickersPath}`, {
         method: 'GET',
@@ -371,7 +379,10 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch options matrix data' },
+      {
+        success: false,
+        error: error.message || 'Failed to fetch options matrix data',
+      },
       { status: 500 }
     );
   }
