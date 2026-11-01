@@ -10,12 +10,9 @@ import {
   Shield,
   Layers,
   Compass,
-  Target,
-  Zap,
   BarChart2,
   Check,
   Clock,
-  Crosshair,
 } from 'lucide-react';
 
 interface OptionMetrics {
@@ -110,6 +107,13 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
+  // Auto-cap expiry aggregation to 2-3 expiries max
+  useEffect(() => {
+    if (data?.availableExpiries && data.availableExpiries.length > 0 && selectedExpiries.length === 0) {
+      setSelectedExpiries(data.availableExpiries.slice(0, 2));
+    }
+  }, [data?.availableExpiries, selectedExpiries.length]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -129,7 +133,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
         const queryParams = new URLSearchParams({
           asset,
           timeframe,
-          ...(selectedExpiries.length > 0 ? { expiry: selectedExpiries.join(',') } : {}),
+          ...(selectedExpiries.length > 0 ? { expiry: selectedExpiries.slice(0, 3).join(',') } : {}),
         });
 
         const res = await fetch(`/api/options?${queryParams.toString()}`);
@@ -150,10 +154,6 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
 
         setData(json);
         setLastRefreshed(new Date());
-
-        if (selectedExpiries.length === 0 && json.availableExpiries && json.availableExpiries.length > 0) {
-          setSelectedExpiries([json.availableExpiries[0]]);
-        }
       } catch (err: any) {
         console.error('Options Matrix Error:', err);
         setError(err.message || 'Unable to sync options matrix');
@@ -192,22 +192,22 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
 
   const toggleExpiry = (exp: string) => {
     setSelectedExpiries((prev) => {
-      if (exp === 'all') {
-        return prev.includes('all') ? [] : ['all'];
-      }
-      const filtered = prev.filter((item) => item !== 'all');
-      if (filtered.includes(exp)) {
-        const next = filtered.filter((item) => item !== exp);
+      if (prev.includes(exp)) {
+        const next = prev.filter((item) => item !== exp);
         return next.length === 0 && data?.availableExpiries?.length ? [data.availableExpiries[0]] : next;
       } else {
-        return [...filtered, exp];
+        // Enforce max 3 combined expiries
+        if (prev.length >= 3) {
+          return [...prev.slice(1), exp];
+        }
+        return [...prev, exp];
       }
     });
   };
 
-  const selectAllExpiries = () => {
+  const selectTopThreeExpiries = () => {
     if (data?.availableExpiries) {
-      setSelectedExpiries(data.availableExpiries);
+      setSelectedExpiries(data.availableExpiries.slice(0, 3));
     }
   };
 
@@ -306,82 +306,117 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
     };
   }, [data?.matrix]);
 
-  // Pure Options Trade Engine: Strictly based on Volume, Strike OI, Walls & PCR
-  const tradeSetup = useMemo(() => {
+  // Market Directional Probability & Horizon Analysis Engine (No TP/SL)
+  const marketAnalysis = useMemo(() => {
     if (!summary || !spotPrice || spotPrice === 0) return null;
 
-    const nearestSup = summary.nearestSupport || spotPrice * 0.98;
-    const strongestSup = summary.strongestSupport || spotPrice * 0.95;
-    const nearestRes = summary.nearestResistance || spotPrice * 1.02;
-    const strongestRes = summary.strongestResistance || spotPrice * 1.05;
-    const maxPain = summary.maxPainStrike || spotPrice;
     const overallPcr = summary.overallPcr;
     const volPcr = summary.overallVolumePcr || overallPcr;
     const netVelocity = flowAnalytics?.netOiVelocity || 0;
+    const nearestSup = summary.nearestSupport || spotPrice * 0.98;
+    const nearestRes = summary.nearestResistance || spotPrice * 1.02;
+    const strongestSup = summary.strongestSupport || spotPrice * 0.95;
+    const strongestRes = summary.strongestResistance || spotPrice * 1.05;
+    const maxPain = summary.maxPainStrike || spotPrice;
 
-    let bias: 'LONG' | 'SHORT' | 'RANGE';
-    let strategy: string;
-    let confidence: number;
-    let entryZone: string;
-    let stopLoss: number;
-    let target1: number;
-    let target2: number;
-    let reasoning: string;
+    // 1. Directional Probabilities based strictly on OI & Volume
+    let bullishProb = 33;
+    let bearishProb = 33;
+    let rangeProb = 34;
 
-    const isNearSupport = (spotPrice - nearestSup) / spotPrice < 0.015;
-    const isNearResistance = (nearestRes - spotPrice) / spotPrice < 0.015;
-
-    if (overallPcr < 0.80 || (netVelocity > 4 && volPcr > 0.8)) {
-      bias = 'LONG';
-      strategy = isNearSupport
-        ? 'Put Support Bounce (Strike PCR High Floor Defense)'
-        : 'Bullish Momentum Expansion (Low Overall PCR < 0.80)';
-      confidence = overallPcr < 0.65 ? 93 : 84;
-      entryZone = `$${formatNumber(nearestSup, 0)} – $${formatNumber(spotPrice, 0)}`;
-      stopLoss = Math.round(strongestSup * 0.995);
-      target1 = Math.round(maxPain > spotPrice ? maxPain : nearestRes);
-      target2 = Math.round(strongestRes);
-      reasoning = `Heavy Put Open Interest defense at $${formatNumber(nearestSup, 0)} with low overall PCR (${overallPcr.toFixed(2)}). Inflow velocity favors upside expansion toward Call Wall ($${formatNumber(strongestRes, 0)}).`;
-    } else if (overallPcr > 1.15 || (netVelocity < -4 && volPcr < 0.9)) {
-      bias = 'SHORT';
-      strategy = isNearResistance
-        ? 'Call Resistance Fade (Heavy Call Wall Overhead)'
-        : 'Bearish Breakdown (Excess Put Hedging / Call Supply)';
-      confidence = overallPcr > 1.35 ? 91 : 82;
-      entryZone = `$${formatNumber(spotPrice, 0)} – $${formatNumber(nearestRes, 0)}`;
-      stopLoss = Math.round(strongestRes * 1.005);
-      target1 = Math.round(maxPain < spotPrice ? maxPain : nearestSup);
-      target2 = Math.round(strongestSup);
-      reasoning = `Massive Call Open Interest capping at $${formatNumber(nearestRes, 0)} alongside elevated PCR (${overallPcr.toFixed(2)}). Sellers defending strikes against upward breakouts.`;
+    if (overallPcr < 0.70) {
+      bullishProb += 28;
+      bearishProb -= 18;
+      rangeProb -= 10;
+    } else if (overallPcr > 1.25) {
+      bearishProb += 28;
+      bullishProb -= 18;
+      rangeProb -= 10;
     } else {
-      bias = 'RANGE';
-      strategy = 'Max Pain Pinning & Range Scalp';
-      confidence = 75;
-      entryZone = `Buy @ $${formatNumber(nearestSup, 0)} / Sell @ $${formatNumber(nearestRes, 0)}`;
-      stopLoss = Math.round(strongestSup * 0.99);
-      target1 = Math.round(maxPain);
-      target2 = Math.round(nearestRes);
-      reasoning = `Balanced Call and Put OI distribution (PCR ${overallPcr.toFixed(2)}). Price expected to oscillate between nearest support/resistance and gravitate toward Max Pain ($${formatNumber(maxPain, 0)}).`;
+      rangeProb += 25;
+      bullishProb -= 12;
+      bearishProb -= 13;
     }
 
-    const risk = Math.abs(spotPrice - stopLoss);
-    const reward = Math.abs(target2 - spotPrice);
-    const rrRatio = risk > 0 ? (reward / risk).toFixed(2) : '2.50';
+    if (netVelocity > 5) {
+      bullishProb += 12;
+      bearishProb -= 8;
+      rangeProb -= 4;
+    } else if (netVelocity < -5) {
+      bearishProb += 12;
+      bullishProb -= 8;
+      rangeProb -= 4;
+    }
+
+    if (volPcr > 1.1) {
+      bullishProb += 6;
+      bearishProb -= 4;
+      rangeProb -= 2;
+    } else if (volPcr < 0.7) {
+      bearishProb += 6;
+      bullishProb -= 4;
+      rangeProb -= 2;
+    }
+
+    // Normalize probabilities to 100%
+    const totalRaw = Math.max(1, bullishProb + bearishProb + rangeProb);
+    bullishProb = Math.round((bullishProb / totalRaw) * 100);
+    bearishProb = Math.round((bearishProb / totalRaw) * 100);
+    rangeProb = 100 - (bullishProb + bearishProb);
+
+    // Primary Market Bias
+    const primaryDirection =
+      bullishProb > bearishProb && bullishProb > rangeProb
+        ? 'BULLISH EXPANSION'
+        : bearishProb > bullishProb && bearishProb > rangeProb
+        ? 'BEARISH ABSORPTION'
+        : 'RANGEBOUND PINNING';
+
+    // 2. Intraday Behavior (Last Few Hours)
+    const recentBehavior =
+      netVelocity > 4
+        ? `Aggressive Put writing observed over the last ${timeframe} (${flowAnalytics?.netPutOiChange.toFixed(1)}% vs ${flowAnalytics?.netCallOiChange.toFixed(1)}% Calls). Market makers are building floor bids, defending $${formatNumber(nearestSup, 0)} against dips.`
+        : netVelocity < -4
+        ? `Call writers actively capping overhead over the last ${timeframe} (Call OI additions outpaced Puts by ${Math.abs(netVelocity).toFixed(1)}%). Overhead supply is compressing price below $${formatNumber(nearestRes, 0)}.`
+        : `Balanced intraday activity over the last ${timeframe}. Neither Call nor Put flow has triggered directional skew; order flow is executing within the existing corridor.`;
+
+    // 3. Daily Structure Baseline
+    const dailyBaseline = `Major liquidity rests between Put Floor at $${formatNumber(strongestSup, 0)} and Call Ceiling at $${formatNumber(strongestRes, 0)}. With Overall PCR at ${overallPcr.toFixed(2)}, total daily Open Interest indicates ${
+      overallPcr < 0.8
+        ? 'underlying institutional preference for upward expansion with low demand for protective put structures.'
+        : overallPcr > 1.2
+        ? 'heavy downside insurance buying, showing institutional positioning for defensive hedging.'
+        : 'neutral positioning with dealer gamma balanced across equidistant wings.'
+    }`;
+
+    // 4. Combined Expiry Pinning (2-3 Expiries)
+    const combinedCount = selectedExpiries.length;
+    const combinedExpiryThesis = `Aggregating ${combinedCount} near-term expirations highlights a primary gravitational pin at Max Pain $${formatNumber(maxPain, 0)}. Spot ($${formatNumber(spotPrice, 0)}) is positioned ${
+      spotPrice > maxPain
+        ? `+${(((spotPrice - maxPain) / spotPrice) * 100).toFixed(1)}% above Max Pain, suggesting gravitational pull or theta decay pressure toward the strike before settlements.`
+        : spotPrice < maxPain
+        ? `-${(((maxPain - spotPrice) / spotPrice) * 100).toFixed(1)}% below Max Pain, indicating positive dealer delta push toward the strike into expiry.`
+        : 'directly at the Max Pain strike equilibrium.'
+    }`;
 
     return {
-      bias,
-      strategy,
-      confidence,
-      entryZone,
-      stopLoss,
-      target1,
-      target2,
-      rrRatio,
-      reasoning,
+      bullishProb,
+      bearishProb,
+      rangeProb,
+      primaryDirection,
+      recentBehavior,
+      dailyBaseline,
+      combinedExpiryThesis,
+      nearestSup,
+      nearestRes,
+      strongestSup,
+      strongestRes,
+      maxPain,
       overallPcr,
       volPcr,
+      combinedCount,
     };
-  }, [summary, spotPrice, flowAnalytics]);
+  }, [summary, spotPrice, flowAnalytics, timeframe, selectedExpiries]);
 
   const tunnelPosition = useMemo(() => {
     const minBound = summary?.strongestSupport || spotPrice * 0.95;
@@ -404,7 +439,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold tracking-tight text-white font-mono">
-                OPTIONS MARKET STRUCTURE & TRADE RADAR
+                OPTIONS MARKET STRUCTURE & PROBABILITY RADAR
               </h2>
               <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 LIVE
@@ -416,7 +451,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
               )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Trade Setups, Multi-Expiry Aggregation, Strike Volume vs. Open Interest Flow & Delta Exchange Feed
+              Directional Probabilities, Multi-Expiry Aggregation, Strike Volume vs. Open Interest Flow via Delta Exchange Feed
             </p>
           </div>
         </div>
@@ -464,7 +499,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
             ))}
           </div>
 
-          {/* Multi-Expiry Selector Dropdown */}
+          {/* Multi-Expiry Selector Dropdown (Enforced 2-3 Expiries) */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setExpiryDropdownOpen(!expiryDropdownOpen)}
@@ -476,28 +511,26 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
                   ? 'Select Expiry'
                   : selectedExpiries.length === 1
                   ? `EXP: ${selectedExpiries[0]}`
-                  : selectedExpiries.includes('all') || selectedExpiries.length === data?.availableExpiries?.length
-                  ? `ALL EXPIRIES (${data?.availableExpiries?.length || 0})`
-                  : `${selectedExpiries.length} Expiries Combined`}
+                  : `Combined ${selectedExpiries.length} Expiries (Max 3)`}
               </span>
               <span className="text-slate-500 text-[10px]">▼</span>
             </button>
 
             {expiryDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-slate-950 border border-slate-800 rounded-lg shadow-2xl p-2 z-50">
+              <div className="absolute right-0 mt-2 w-72 bg-slate-950 border border-slate-800 rounded-lg shadow-2xl p-2 z-50">
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[11px] font-mono text-slate-400">
-                  <span>Select Multiple Expiries:</span>
+                  <span>Combine Near-Term (Max 3):</span>
                   <button
-                    onClick={selectAllExpiries}
+                    onClick={selectTopThreeExpiries}
                     className="text-cyan-400 hover:underline font-semibold"
                   >
-                    Select All
+                    Next 3 Dates
                   </button>
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-1">
                   {data?.availableExpiries && data.availableExpiries.length > 0 ? (
                     data.availableExpiries.map((exp) => {
-                      const isSelected = selectedExpiries.includes(exp) || selectedExpiries.includes('all');
+                      const isSelected = selectedExpiries.includes(exp);
                       return (
                         <button
                           key={exp}
@@ -565,7 +598,7 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
       {/* Active Expiries Pill Bar */}
       {selectedExpiries.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-          <span className="text-slate-500 mr-1">Active Expiries:</span>
+          <span className="text-slate-500 mr-1">Combined Expiries (2-3 Max):</span>
           {selectedExpiries.map((exp) => (
             <span
               key={exp}
@@ -582,102 +615,126 @@ export default function OptionsMatrix({ initialAsset = 'BTC', className = '' }: 
               )}
             </span>
           ))}
-          {selectedExpiries.length > 1 && (
-            <span className="text-slate-400 font-semibold ml-1">
-              (Aggregated Open Interest & Volume across {selectedExpiries.length} dates)
-            </span>
-          )}
+          <span className="text-slate-400 font-semibold ml-1">
+            (Unified Open Interest & Volume flow for near-term settlement)
+          </span>
         </div>
       )}
 
-      {/* 1. ACTIONABLE TRADE SUGGESTIONS & EXECUTION ENGINE */}
-      {tradeSetup && (
-        <div className="mt-4 p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/40 rounded-xl relative overflow-hidden font-mono shadow-lg">
+      {/* 1. MARKET DIRECTIONAL PROBABILITY & STRUCTURAL HORIZONS */}
+      {marketAnalysis && (
+        <div className="mt-4 p-4 bg-gradient-to-r from-slate-950 via-[#0d121c] to-slate-950 border border-cyan-500/40 rounded-xl font-mono shadow-lg">
+          {/* Top Probability Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 border-b border-slate-800 gap-2">
             <div className="flex items-center gap-2">
-              <Crosshair className="w-4 h-4 text-cyan-400" />
+              <Compass className="w-4 h-4 text-cyan-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-100">
-                OPTIONS MARKET STRUCTURE & TRADE SUGGESTION ({asset})
+                MARKET DIRECTION PROBABILITY & DATA BEHAVIOR ({asset})
               </span>
               <span
                 className={`px-2 py-0.5 text-[10px] font-black rounded ${
-                  tradeSetup.bias === 'LONG'
+                  marketAnalysis.primaryDirection.includes('BULLISH')
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : tradeSetup.bias === 'SHORT'
+                    : marketAnalysis.primaryDirection.includes('BEARISH')
                     ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                 }`}
               >
-                {tradeSetup.bias} SETUP
+                {marketAnalysis.primaryDirection}
               </span>
             </div>
 
             <div className="flex items-center gap-2 text-xs">
               <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
-                OI PCR: <strong className="text-cyan-400">{tradeSetup.overallPcr.toFixed(2)}</strong>
+                OI PCR: <strong className="text-cyan-400">{marketAnalysis.overallPcr.toFixed(2)}</strong>
               </span>
               <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
-                Vol PCR: <strong className="text-amber-400">{tradeSetup.volPcr.toFixed(2)}</strong>
+                Vol PCR: <strong className="text-amber-400">{marketAnalysis.volPcr.toFixed(2)}</strong>
               </span>
-              <span className="text-slate-600">|</span>
-              <span className="text-slate-400">R:R:</span>
-              <span className="text-cyan-300 font-bold">1:{tradeSetup.rrRatio}</span>
             </div>
           </div>
 
-          {/* 4 Trade Milestone Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg">
-              <div className="text-[10px] text-slate-400 uppercase font-semibold">Structure Strategy</div>
-              <div className="text-xs font-bold text-white mt-1 leading-snug">
-                {tradeSetup.strategy}
-              </div>
-              <div className="text-[9px] text-slate-500 mt-1 truncate">
-                Driven by Strike & Volume PCR
-              </div>
+          {/* Probability Gauge Bar */}
+          <div className="my-3">
+            <div className="flex items-center justify-between text-xs mb-1.5 font-semibold">
+              <span className="text-emerald-400 flex items-center gap-1">
+                <span>▲ Upward Continuation:</span>
+                <span className="text-sm font-extrabold">{marketAnalysis.bullishProb}%</span>
+              </span>
+              <span className="text-amber-300 flex items-center gap-1">
+                <span>◆ Rangebound / Pin:</span>
+                <span className="text-sm font-extrabold">{marketAnalysis.rangeProb}%</span>
+              </span>
+              <span className="text-rose-400 flex items-center gap-1">
+                <span>▼ Downward Rejection:</span>
+                <span className="text-sm font-extrabold">{marketAnalysis.bearishProb}%</span>
+              </span>
             </div>
-
-            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg">
-              <div className="text-[10px] text-cyan-400 uppercase font-semibold">Optimal Entry Zone</div>
-              <div className="text-xs font-bold text-cyan-300 mt-1">
-                {tradeSetup.entryZone}
-              </div>
-              <div className="text-[9px] text-slate-500 mt-1">
-                Nearest Support/Resistance Level
-              </div>
-            </div>
-
-            <div className="p-3 bg-rose-950/20 border border-rose-500/30 rounded-lg">
-              <div className="text-[10px] text-rose-400 uppercase font-semibold flex items-center justify-between">
-                <span>Stop Loss (SL)</span>
-                <span className="text-[9px] text-rose-500">INVALIDATION</span>
-              </div>
-              <div className="text-sm font-extrabold text-rose-300 mt-1">
-                ${formatNumber(tradeSetup.stopLoss, asset === 'XAUT' ? 1 : 0)}
-              </div>
-              <div className="text-[9px] text-slate-500 mt-1">
-                Beyond Major Put Floor / Call Wall
-              </div>
-            </div>
-
-            <div className="p-3 bg-emerald-950/20 border border-emerald-500/30 rounded-lg">
-              <div className="text-[10px] text-emerald-400 uppercase font-semibold flex items-center justify-between">
-                <span>Take Profit Targets</span>
-                <span className="text-[9px] text-emerald-500">MAX PAIN / RES</span>
-              </div>
-              <div className="text-xs font-bold text-emerald-300 mt-1 flex items-center justify-between">
-                <span>TP1: ${formatNumber(tradeSetup.target1, 0)}</span>
-                <span className="text-emerald-400 font-extrabold">TP2: ${formatNumber(tradeSetup.target2, 0)}</span>
-              </div>
-              <div className="text-[9px] text-slate-500 mt-1">
-                Targeting Max Pain & Major Wall
-              </div>
+            <div className="w-full h-3 bg-slate-950 rounded-full border border-slate-800 flex overflow-hidden">
+              <div
+                className="bg-emerald-500 h-full transition-all duration-700"
+                style={{ width: `${marketAnalysis.bullishProb}%` }}
+                title={`Bullish: ${marketAnalysis.bullishProb}%`}
+              />
+              <div
+                className="bg-amber-500 h-full transition-all duration-700"
+                style={{ width: `${marketAnalysis.rangeProb}%` }}
+                title={`Rangebound: ${marketAnalysis.rangeProb}%`}
+              />
+              <div
+                className="bg-rose-500 h-full transition-all duration-700"
+                style={{ width: `${marketAnalysis.bearishProb}%` }}
+                title={`Bearish: ${marketAnalysis.bearishProb}%`}
+              />
             </div>
           </div>
 
-          <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center gap-2 text-[11px] text-slate-400">
-            <span className="text-cyan-400 font-semibold shrink-0">Structure Flow Thesis:</span>
-            <span>{tradeSetup.reasoning}</span>
+          {/* 3 Horizon Breakdown Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+            {/* Card 1: Last Few Hours Behavior */}
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] text-cyan-400 uppercase font-semibold flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Intraday Flow (Last {timeframe})
+                </div>
+                <div className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                  {marketAnalysis.recentBehavior}
+                </div>
+              </div>
+              <div className="text-[9px] text-slate-500 mt-2 pt-1 border-t border-slate-900">
+                Source: Real-time Delta contract addition rate
+              </div>
+            </div>
+
+            {/* Card 2: Daily Structure Baseline */}
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] text-amber-400 uppercase font-semibold flex items-center gap-1">
+                  <BarChart2 className="w-3 h-3" /> Daily Structural Baseline
+                </div>
+                <div className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                  {marketAnalysis.dailyBaseline}
+                </div>
+              </div>
+              <div className="text-[9px] text-slate-500 mt-2 pt-1 border-t border-slate-900">
+                Levels: Floor ${formatNumber(marketAnalysis.strongestSup, 0)} | Wall ${formatNumber(marketAnalysis.strongestRes, 0)}
+              </div>
+            </div>
+
+            {/* Card 3: Combined 2-3 Expiries Pinning */}
+            <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-lg flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] text-emerald-400 uppercase font-semibold flex items-center gap-1">
+                  <Layers className="w-3 h-3" /> Combined Expiry Pin ({marketAnalysis.combinedCount} Dates)
+                </div>
+                <div className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                  {marketAnalysis.combinedExpiryThesis}
+                </div>
+              </div>
+              <div className="text-[9px] text-slate-500 mt-2 pt-1 border-t border-slate-900">
+                Max Pain: ${formatNumber(marketAnalysis.maxPain, 0)}
+              </div>
+            </div>
           </div>
         </div>
       )}
