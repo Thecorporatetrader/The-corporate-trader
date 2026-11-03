@@ -102,98 +102,6 @@ const getDisplayAssetName = (token: string): string => {
   return token;
 };
 
-// Robust fallback data generator when API is offline or testing
-function getFallbackOptionsData(asset: string, timeframe: string): OptionsApiResponse {
-  const spot = asset === 'XAUT' ? 2740.80 : asset === 'BTC' ? 78032.50 : asset === 'ETH' ? 3850.25 : 192.40;
-  const step = asset === 'XAUT' ? 25 : asset === 'BTC' ? 1000 : asset === 'ETH' ? 100 : 5;
-  const center = Math.round(spot / step) * step;
-  const strikes: MatrixRow[] = [];
-
-  for (let i = -6; i <= 6; i++) {
-    const s = center + i * step;
-    const callOi = Math.round(1850 * (1 + Math.sin(i * 1.5) * 0.45) * (i >= 0 ? 1.5 : 0.65));
-    const putOi = Math.round(2350 * (1 + Math.cos(i * 1.2) * 0.45) * (i <= 0 ? 1.85 : 0.55));
-    const callVol = Math.round(callOi * 0.42);
-    const putVol = Math.round(putOi * 0.48);
-    const strikePcr = callOi > 0 ? Number((putOi / callOi).toFixed(2)) : 0;
-    const volumePcr = callVol > 0 ? Number((putVol / callVol).toFixed(2)) : 0;
-
-    const callShift = Math.round(callVol * 0.55 + callOi * 0.09);
-    const putShift = Math.round(putVol * 0.62 + putOi * 0.12);
-
-    strikes.push({
-      strike: s,
-      callOi,
-      putOi,
-      callVolume: callVol,
-      putVolume: putVol,
-      strikePcr,
-      volumePcr,
-      callBarPct: Math.min(100, Math.round((callOi / 4500) * 100)),
-      putBarPct: Math.min(100, Math.round((putOi / 4500) * 100)),
-      isItmCall: spot > s,
-      isItmPut: spot < s,
-      signals: [],
-      call: {
-        symbol: `${asset}-${s}-C`,
-        contractType: 'call',
-        oi: callOi,
-        oiChange: callShift,
-        oiChangePct: Number(((callShift / (callOi || 1)) * 100).toFixed(1)),
-        markPrice: Math.max(spot - s, step * 0.1),
-        volume: callVol,
-        notional: callOi * spot,
-      },
-      put: {
-        symbol: `${asset}-${s}-P`,
-        contractType: 'put',
-        oi: putOi,
-        oiChange: putShift,
-        oiChangePct: Number(((putShift / (putOi || 1)) * 100).toFixed(1)),
-        markPrice: Math.max(s - spot, step * 0.1),
-        volume: putVol,
-        notional: putOi * spot,
-      },
-    });
-  }
-
-  const totCall = strikes.reduce((acc, r) => acc + r.callOi, 0);
-  const totPut = strikes.reduce((acc, r) => acc + r.putOi, 0);
-  const totCallVol = strikes.reduce((acc, r) => acc + r.callVolume, 0);
-  const totPutVol = strikes.reduce((acc, r) => acc + r.putVolume, 0);
-  const overallPcr = totCall > 0 ? Number((totPut / totCall).toFixed(3)) : 1.38;
-
-  return {
-    success: true,
-    asset,
-    underlyingSpotPrice: spot,
-    availableExpiries: ['2026-11-02', '2026-11-03', '2026-11-07', '2026-11-28'],
-    selectedExpiries: ['2026-11-02', '2026-11-03'],
-    updatedAt: new Date().toISOString(),
-    summary: {
-      totalCallOi: totCall,
-      totalPutOi: totPut,
-      totalCallVolume: totCallVol,
-      totalPutVolume: totPutVol,
-      totalCallOiNotional: totCall * spot,
-      totalPutOiNotional: totPut * spot,
-      overallPcr,
-      overallVolumePcr: totCallVol > 0 ? Number((totPutVol / totCallVol).toFixed(3)) : 1.15,
-      sentiment: overallPcr >= 1.0 ? 'BUYING SIDE' : 'SELLING SIDE',
-      sentimentColor: overallPcr >= 1.0 ? 'emerald' : 'rose',
-      pcrDescription: overallPcr >= 1.0 ? 'Put writing dominant (buying support)' : 'Call writing dominant (capping upside)',
-      positionBuilding: 'Active liquidity buildup',
-      maxPainStrike: center,
-      nearestSupport: center - step,
-      strongestSupport: center - 3 * step,
-      nearestResistance: center + step,
-      strongestResistance: center + 3 * step,
-      contractsCount: strikes.length * 2,
-    },
-    matrix: strikes,
-  };
-}
-
 // DEFAULT ASSET SET TO XAUT (DISPLAYED AS XAUUSD)
 export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }: OptionsMatrixProps) {
   const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL' | 'XAUT'>(initialAsset);
@@ -218,10 +126,10 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Auto-select nearest 2 expiries by default
+  // Auto-select the nearest expiry by default
   useEffect(() => {
     if (data?.availableExpiries && data.availableExpiries.length > 0 && selectedExpiries.length === 0) {
-      setSelectedExpiries(data.availableExpiries.slice(0, 2));
+      setSelectedExpiries(data.availableExpiries.slice(0, 1));
     }
   }, [data?.availableExpiries, selectedExpiries.length]);
 
@@ -259,17 +167,18 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         }
 
         const json: OptionsApiResponse = await res.json();
-        if (!json.success && (json as any).error) {
-          throw new Error((json as any).error);
+        if (!json?.success || !Array.isArray(json.matrix)) {
+          throw new Error((json as any)?.error || 'Options API returned an invalid response.');
         }
 
         setData(json);
         setLastRefreshed(new Date());
-      } catch (err: any) {
-        console.warn('Backend unavailable, using simulated live matrix feed:', err.message);
-        const fallback = getFallbackOptionsData(asset, timeframe);
-        setData(fallback);
-        setLastRefreshed(new Date());
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unable to load options data.';
+        console.error('Options feed request failed:', message);
+        setError(message);
+        // Never replace a failed live request with synthetic market data.
+        // Keep the last successful response visible, if one exists.
       } finally {
         if (!isBackground) setLoading(false);
         setCountdown(POLLING_INTERVAL_SEC);
@@ -332,7 +241,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
   };
 
   const formatNumber = (num: number | undefined | null, decimals = 2) => {
-    if (num === null || num === undefined) return '0';
+    if (num === null || num === undefined || !Number.isFinite(Number(num))) return '—';
     return Number(num).toLocaleString('en-US', {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
@@ -340,7 +249,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
   };
 
   const formatPercentChange = (val: number | undefined | null) => {
-    if (val === null || val === undefined) return '0.00%';
+    if (val === null || val === undefined || !Number.isFinite(Number(val))) return '—';
     const num = Number(val);
     const sign = num > 0 ? '+' : '';
     return `${sign}${num.toFixed(2)}%`;
@@ -357,263 +266,186 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
   const summary = data?.summary;
   const spotPrice = data?.underlyingSpotPrice || 0;
 
-  // ROBUST FLOW ANALYTICS: Guaranteed contract shifts calculated
+  // OI flow uses only the API's observed OI change. Volume is not a proxy for OI change.
+  // Positive and negative OI changes are shown as contract changes, not buyer/seller activity.
   const flowAnalytics = useMemo(() => {
-    if (!data?.matrix || data.matrix.length === 0) return null;
+    if (!data?.matrix?.length) return null;
+
+    const rowsWithShifts = data.matrix.map((row) => {
+      const callChange = Number.isFinite(Number(row.call?.oiChange)) ? Number(row.call?.oiChange) : 0;
+      const putChange = Number.isFinite(Number(row.put?.oiChange)) ? Number(row.put?.oiChange) : 0;
+      return {
+        ...row,
+        derivedCallShift: callChange,
+        derivedPutShift: putChange,
+      };
+    });
 
     let netCallOiChange = 0;
     let netPutOiChange = 0;
     let totalCallOiAdded = 0;
     let totalPutOiAdded = 0;
-
+    let totalCallOiReduced = 0;
+    let totalPutOiReduced = 0;
     let topCallAdditionStrike: number | null = null;
     let topPutAdditionStrike: number | null = null;
     let topCallVolumeStrike: number | null = null;
     let topPutVolumeStrike: number | null = null;
-
-    let maxCallChg = -Infinity;
-    let maxPutChg = -Infinity;
-    let maxCallVol = -Infinity;
-    let maxPutVol = -Infinity;
-
+    let maxCallChange = 0;
+    let maxPutChange = 0;
+    let maxCallVol = -1;
+    let maxPutVol = -1;
     let topShiftStrike: number | null = null;
     let maxTotalShiftContracts = 0;
     let topShiftType: 'CALL' | 'PUT' = 'PUT';
 
-    const rowsWithShifts = data.matrix.map((r) => {
-      let cShift = r.call?.oiChange || 0;
-      let pShift = r.put?.oiChange || 0;
+    for (const row of rowsWithShifts) {
+      const callChange = row.derivedCallShift;
+      const putChange = row.derivedPutShift;
+      const callVol = Number(row.callVolume) || 0;
+      const putVol = Number(row.putVolume) || 0;
 
-      if (!cShift || cShift === 0) {
-        if (r.call?.oiChangePct) {
-          cShift = Math.round((Math.abs(r.call.oiChangePct) * r.callOi) / 100);
-        } else {
-          cShift = Math.round((r.callVolume * 0.45) + (r.callOi * 0.08));
-        }
-      }
-      if (!pShift || pShift === 0) {
-        if (r.put?.oiChangePct) {
-          pShift = Math.round((Math.abs(r.put.oiChangePct) * r.putOi) / 100);
-        } else {
-          pShift = Math.round((r.putVolume * 0.52) + (r.putOi * 0.11));
-        }
-      }
+      netCallOiChange += callChange;
+      netPutOiChange += putChange;
+      totalCallOiAdded += Math.max(0, callChange);
+      totalPutOiAdded += Math.max(0, putChange);
+      totalCallOiReduced += Math.abs(Math.min(0, callChange));
+      totalPutOiReduced += Math.abs(Math.min(0, putChange));
 
-      return {
-        ...r,
-        derivedCallShift: cShift,
-        derivedPutShift: pShift,
-      };
-    });
-
-    for (const r of rowsWithShifts) {
-      const cChgPct = r.call?.oiChangePct || 0;
-      const pChgPct = r.put?.oiChangePct || 0;
-
-      totalCallOiAdded += r.derivedCallShift;
-      totalPutOiAdded += r.derivedPutShift;
-
-      const combinedShift = r.derivedCallShift + r.derivedPutShift;
-      if (combinedShift > maxTotalShiftContracts) {
-        maxTotalShiftContracts = combinedShift;
-        topShiftStrike = r.strike;
-        topShiftType = r.derivedPutShift >= r.derivedCallShift ? 'PUT' : 'CALL';
+      const combinedAbsoluteChange = Math.abs(callChange) + Math.abs(putChange);
+      if (combinedAbsoluteChange > maxTotalShiftContracts) {
+        maxTotalShiftContracts = combinedAbsoluteChange;
+        topShiftStrike = row.strike;
+        topShiftType = Math.abs(putChange) >= Math.abs(callChange) ? 'PUT' : 'CALL';
       }
 
-      const cVol = r.callVolume || 0;
-      const pVol = r.putVolume || 0;
-
-      netCallOiChange += cChgPct;
-      netPutOiChange += pChgPct;
-
-      if (cChgPct > maxCallChg) {
-        maxCallChg = cChgPct;
-        topCallAdditionStrike = r.strike;
+      if (callChange > maxCallChange) {
+        maxCallChange = callChange;
+        topCallAdditionStrike = row.strike;
       }
-      if (pChgPct > maxPutChg) {
-        maxPutChg = pChgPct;
-        topPutAdditionStrike = r.strike;
+      if (putChange > maxPutChange) {
+        maxPutChange = putChange;
+        topPutAdditionStrike = row.strike;
       }
-      if (cVol > maxCallVol) {
-        maxCallVol = cVol;
-        topCallVolumeStrike = r.strike;
+      if (callVol > maxCallVol) {
+        maxCallVol = callVol;
+        topCallVolumeStrike = row.strike;
       }
-      if (pVol > maxPutVol) {
-        maxPutVol = pVol;
-        topPutVolumeStrike = r.strike;
+      if (putVol > maxPutVol) {
+        maxPutVol = putVol;
+        topPutVolumeStrike = row.strike;
       }
     }
-
-    const netOiVelocity = netPutOiChange - netCallOiChange;
-    const flowDirection =
-      netOiVelocity > 5
-        ? 'BUYING SIDE (Put Writing / Support Defense)'
-        : netOiVelocity < -5
-        ? 'SELLING SIDE (Call Writing / Overhead Capping)'
-        : 'NEUTRAL ACCUMULATION';
 
     return {
       rowsWithShifts,
       netCallOiChange,
       netPutOiChange,
-      totalCallOiAdded: totalCallOiAdded || 2850,
-      totalPutOiAdded: totalPutOiAdded || 4570,
-      topShiftStrike: topShiftStrike || data.matrix[0]?.strike || 0,
-      maxTotalShiftContracts: maxTotalShiftContracts || 1086,
+      totalCallOiAdded,
+      totalPutOiAdded,
+      totalCallOiReduced,
+      totalPutOiReduced,
+      topShiftStrike,
+      maxTotalShiftContracts,
       topShiftType,
       topCallAdditionStrike,
       topPutAdditionStrike,
       topCallVolumeStrike,
       topPutVolumeStrike,
-      flowDirection,
-      netOiVelocity,
+      hasOiChangeData: rowsWithShifts.some((row) => row.call?.oiChange !== undefined || row.put?.oiChange !== undefined),
     };
   }, [data?.matrix]);
 
-  // Market analysis with 3 nearest S/R strikes + PCR in brackets
+  // Options-derived context only. OI/PCR cannot identify whether buyers or writers initiated trades.
   const marketAnalysis = useMemo(() => {
-    if (!summary || !spotPrice || spotPrice === 0) return null;
+    if (!summary || !spotPrice || !data?.matrix?.length) return null;
 
-    const overallPcr = summary.overallPcr;
-    const volPcr = summary.overallVolumePcr || overallPcr;
-    const netVelocity = flowAnalytics?.netOiVelocity || 0;
+    const matrix = data.matrix;
+    const overallPcr = Number(summary.overallPcr) || 0;
+    const volPcr = summary.overallVolumePcr == null ? null : Number(summary.overallVolumePcr);
 
-    const matrix = data?.matrix || [];
-    
-    // Nearest Resistances: Strikes above spot sorted ascending
     const resistanceStrikes = matrix
-      .filter((r) => r.strike >= spotPrice)
+      .filter((row) => row.strike > spotPrice)
       .sort((a, b) => a.strike - b.strike);
-
-    // Nearest Supports: Strikes below spot sorted descending
     const supportStrikes = matrix
-      .filter((r) => r.strike < spotPrice)
+      .filter((row) => row.strike < spotPrice)
       .sort((a, b) => b.strike - a.strike);
 
-    const r1 = resistanceStrikes[0]?.strike || (spotPrice * 1.01);
-    const r1Pcr = resistanceStrikes[0]?.strikePcr ?? 0.42;
+    const strongestResistanceRow = resistanceStrikes.reduce<MatrixRow | null>(
+      (best, row) => !best || row.callOi > best.callOi ? row : best,
+      null
+    );
+    const strongestSupportRow = supportStrikes.reduce<MatrixRow | null>(
+      (best, row) => !best || row.putOi > best.putOi ? row : best,
+      null
+    );
 
-    const r2 = resistanceStrikes[1]?.strike || (r1 * 1.015);
-    const r2Pcr = resistanceStrikes[1]?.strikePcr ?? 0.35;
+    const r1 = resistanceStrikes[0] ?? null;
+    const r2 = resistanceStrikes[1] ?? null;
+    const r3 = resistanceStrikes[2] ?? null;
+    const s1 = supportStrikes[0] ?? null;
+    const s2 = supportStrikes[1] ?? null;
+    const s3 = supportStrikes[2] ?? null;
 
-    const r3 = resistanceStrikes[2]?.strike || (r2 * 1.015);
-    const r3Pcr = resistanceStrikes[2]?.strikePcr ?? 0.28;
+    const pcrContext =
+      overallPcr > 1.15 ? 'PUT OI HEAVIER' :
+      overallPcr < 0.85 ? 'CALL OI HEAVIER' :
+      'OI MIXED / BALANCED';
 
-    const s1 = supportStrikes[0]?.strike || (spotPrice * 0.99);
-    const s1Pcr = supportStrikes[0]?.strikePcr ?? 1.45;
+    const verbalFlowNarrative = flowAnalytics
+      ? `For the selected ${timeframe} window, the API reports net call OI change of ${flowAnalytics.netCallOiChange >= 0 ? '+' : ''}${formatNumber(flowAnalytics.netCallOiChange, 0)} contracts and net put OI change of ${flowAnalytics.netPutOiChange >= 0 ? '+' : ''}${formatNumber(flowAnalytics.netPutOiChange, 0)} contracts. Positive changes mean reported OI increased; negative changes mean it decreased. OI change and volume do not reveal whether buyers or writers initiated the positions. The largest absolute combined OI change is at ${flowAnalytics.topShiftStrike == null ? 'not available' : `$${formatNumber(flowAnalytics.topShiftStrike, 0)}`}.`
+      : 'OI change data is not available from the current response.';
 
-    const s2 = supportStrikes[1]?.strike || (s1 * 0.985);
-    const s2Pcr = supportStrikes[1]?.strikePcr ?? 1.78;
+    const verbalBaselineNarrative =
+      `The nearest listed strikes above spot are potential call-OI concentration areas, while the nearest listed strikes below spot are potential put-OI concentration areas. These are reference levels from the selected options data, not confirmed technical support or resistance. Confirm price reaction on the XAUUSD spot chart before considering a trade.`;
 
-    const s3 = supportStrikes[2]?.strike || (s2 * 0.985);
-    const s3Pcr = supportStrikes[2]?.strikePcr ?? 2.15;
-
-    // Strongest support and resistance strikes with PCR
-    const sortedByPutOi = [...matrix].sort((a, b) => b.putOi - a.putOi);
-    const sortedByCallOi = [...matrix].sort((a, b) => b.callOi - a.callOi);
-
-    const strongSupportStrike = sortedByPutOi[0]?.strike || s3;
-    const strongSupportPcr = sortedByPutOi[0]?.strikePcr ?? s3Pcr;
-
-    const strongestResStrike = sortedByCallOi[0]?.strike || r3;
-    const strongestResPcr = sortedByCallOi[0]?.strikePcr ?? r3Pcr;
-
-    const ntzLower = s1;
-    const ntzUpper = r1;
-    const maxPain = summary.maxPainStrike || spotPrice;
-
-    // OPPOSITE SELLER LOGIC: High PCR (>1.0) = Buying Side, Low PCR (<0.8) = Selling Side
-    let bullishProb = 33;
-    let bearishProb = 33;
-    let rangeProb = 34;
-
-    if (overallPcr > 1.15) {
-      bullishProb += 28;
-      bearishProb -= 18;
-      rangeProb -= 10;
-    } else if (overallPcr < 0.80) {
-      bearishProb += 28;
-      bullishProb -= 18;
-      rangeProb -= 10;
-    } else {
-      rangeProb += 25;
-      bullishProb -= 12;
-      bearishProb -= 13;
-    }
-
-    if (netVelocity > 5) {
-      bullishProb += 12;
-      bearishProb -= 8;
-      rangeProb -= 4;
-    } else if (netVelocity < -5) {
-      bearishProb += 12;
-      bullishProb -= 8;
-      rangeProb -= 4;
-    }
-
-    const totalRaw = Math.max(1, bullishProb + bearishProb + rangeProb);
-    bullishProb = Math.round((bullishProb / totalRaw) * 100);
-    bearishProb = Math.round((bearishProb / totalRaw) * 100);
-    rangeProb = 100 - (bullishProb + bearishProb);
-
-    const primaryDirection =
-      bullishProb > bearishProb && bullishProb > rangeProb
-        ? 'BULLISH EXPANSION (BUYING SIDE)'
-        : bearishProb > bullishProb && bearishProb > rangeProb
-        ? 'BEARISH ABSORPTION (SELLING SIDE)'
-        : 'RANGEBOUND PINNING';
-
-    const verbalFlowNarrative = `Over the last ${timeframe}, Open Interest is actively shifting with net velocity at ${netVelocity > 0 ? '+' : ''}${netVelocity.toFixed(1)}%. Total Call additions stand at +${formatNumber(flowAnalytics?.totalCallOiAdded, 0)} contracts while Put additions reached +${formatNumber(flowAnalytics?.totalPutOiAdded, 0)} contracts. Most aggressive additions are concentrating around strike $${formatNumber(flowAnalytics?.topShiftStrike, 0)}. Because options data reflects seller positioning (option writing), elevated PCR (${overallPcr.toFixed(2)}) indicates institutional market makers are aggressively selling puts to build downside floor support, capping breakdown risk below S1 ($${formatNumber(s1, 0)}). Conversely, strikes above $${formatNumber(r1, 0)} exhibit low PCR (${r1Pcr.toFixed(2)}), representing overhead call overhang where sellers are capping fast breakout attempts.`;
-
-    const verbalBaselineNarrative = `Major daily structural liquidity rests between Strong Support at $${formatNumber(strongSupportStrike, 0)} (PCR: ${strongSupportPcr.toFixed(2)}) and Strongest Resistance at $${formatNumber(strongestResStrike, 0)} (PCR: ${strongestResPcr.toFixed(2)}). The No Trade Zone is defined between $${formatNumber(ntzLower, 0)} and $${formatNumber(ntzUpper, 0)}. Traders should stand aside during mid-corridor equilibrium chop and watch for high-probability buying opportunities on retests of high-PCR support levels ($${formatNumber(s1, 0)} - $${formatNumber(s3, 0)}) or selling opportunities at low-PCR resistance caps ($${formatNumber(r1, 0)} - $${formatNumber(r3, 0)}).`;
-
-    const verbalExpiryNarrative = `Aggregating ${selectedExpiries.length} near-term settlement horizons highlights a primary gravitational equilibrium pinned at Max Pain $${formatNumber(maxPain, 0)}. Spot ($${formatNumber(spotPrice, 0)}) is positioned ${
-      spotPrice > maxPain
-        ? `+${(((spotPrice - maxPain) / spotPrice) * 100).toFixed(1)}% above Max Pain, indicating potential theta decay pull toward equilibrium before expiration.`
-        : spotPrice < maxPain
-        ? `-${(((maxPain - spotPrice) / spotPrice) * 100).toFixed(1)}% below Max Pain, suggesting upward dealer delta push into settlement.`
-        : 'directly at the Max Pain strike equilibrium.'
-    }`;
+    const maxPain = summary.maxPainStrike ?? null;
+    const verbalExpiryNarrative = maxPain == null
+      ? 'Max Pain is not available for the current response. Max Pain is an options-chain calculation, not a reliable forecast or a guaranteed price target.'
+      : `The API reports Max Pain at $${formatNumber(maxPain, 0)}. Spot is $${formatNumber(spotPrice, 2)}. Treat Max Pain only as an expiry-related reference; it does not predict that price will move toward it.`;
 
     return {
-      bullishProb,
-      bearishProb,
-      rangeProb,
-      primaryDirection,
-      r1, r1Pcr,
-      r2, r2Pcr,
-      r3, r3Pcr,
-      s1, s1Pcr,
-      s2, s2Pcr,
-      s3, s3Pcr,
-      strongSupportStrike,
-      strongSupportPcr,
-      strongestResStrike,
-      strongestResPcr,
-      ntzLower,
-      ntzUpper,
+      r1: r1?.strike ?? null,
+      r1Pcr: r1?.strikePcr ?? null,
+      r2: r2?.strike ?? null,
+      r2Pcr: r2?.strikePcr ?? null,
+      r3: r3?.strike ?? null,
+      r3Pcr: r3?.strikePcr ?? null,
+      s1: s1?.strike ?? null,
+      s1Pcr: s1?.strikePcr ?? null,
+      s2: s2?.strike ?? null,
+      s2Pcr: s2?.strikePcr ?? null,
+      s3: s3?.strike ?? null,
+      s3Pcr: s3?.strikePcr ?? null,
+      strongSupportStrike: strongestSupportRow?.strike ?? null,
+      strongSupportPcr: strongestSupportRow?.strikePcr ?? null,
+      strongestResStrike: strongestResistanceRow?.strike ?? null,
+      strongestResPcr: strongestResistanceRow?.strikePcr ?? null,
+      ntzLower: s1?.strike ?? null,
+      ntzUpper: r1?.strike ?? null,
       maxPain,
       overallPcr,
       volPcr,
+      pcrContext,
       verbalFlowNarrative,
       verbalBaselineNarrative,
       verbalExpiryNarrative,
     };
-  }, [summary, spotPrice, flowAnalytics, timeframe, selectedExpiries, data?.matrix]);
+  }, [summary, spotPrice, flowAnalytics, timeframe, data?.matrix]);
 
   const tunnelPosition = useMemo(() => {
-    const minBound = marketAnalysis?.s3 || summary?.strongestSupport || spotPrice * 0.95;
-    const maxBound = marketAnalysis?.r3 || summary?.strongestResistance || spotPrice * 1.05;
-    if (maxBound <= minBound) return 50;
-    const pos = ((spotPrice - minBound) / (maxBound - minBound)) * 100;
-    return Math.max(4, Math.min(96, Math.round(pos)));
-  }, [marketAnalysis?.s3, marketAnalysis?.r3, summary?.strongestSupport, summary?.strongestResistance, spotPrice]);
+    const lower = marketAnalysis?.s3 ?? marketAnalysis?.s1;
+    const upper = marketAnalysis?.r3 ?? marketAnalysis?.r1;
+    if (lower == null || upper == null || upper <= lower) return 50;
+    const position = ((spotPrice - lower) / (upper - lower)) * 100;
+    return Math.max(4, Math.min(96, Math.round(position)));
+  }, [marketAnalysis?.s3, marketAnalysis?.r3, marketAnalysis?.s1, marketAnalysis?.r1, spotPrice]);
 
   return (
     <div
       className={`w-full bg-[#0a0d14] text-slate-100 rounded-xl border border-slate-800 shadow-2xl p-4 md:p-6 font-sans ${className}`}
     >
-      {/* 1. TOP HEADER WITH CURRENT SPOT PRICE, PAIR DISPLAY (XAUUSD AS DEFAULT) & REAL-TIME BADGE (DELTA FEED NAME REMOVED) */}
+      {/* 1. TOP HEADER WITH CURRENT SPOT PRICE, PAIR DISPLAY (XAUUSD AS DEFAULT) & OPTIONS FEED BADGE (DELTA FEED NAME REMOVED) */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-cyan-950/60 border border-cyan-500/30 rounded-lg text-cyan-400">
@@ -622,7 +454,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="text-xl font-bold tracking-tight text-white font-mono">
-                OPTIONS MARKET STRUCTURE & PROBABILITY RADAR
+                OPTIONS MARKET STRUCTURE & POSITIONING RADAR
               </h2>
               {/* CURRENT SPOT PRICE AT TOP */}
               <div className="px-3 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-2">
@@ -633,13 +465,13 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                   ${formatNumber(spotPrice, asset === 'XAUT' ? 2 : 2)}
                 </span>
               </div>
-              {/* REAL-TIME BADGE (DELTA EXCHANGE FEED REMOVED) */}
+              {/* OPTIONS FEED BADGE (DELTA EXCHANGE FEED REMOVED) */}
               <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
-                REAL-TIME
+                OPTIONS FEED
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Derivatives Open Interest Selling Matrix & Underlying Spot Price Execution
+              Options OI and volume context for XAUUSD spot analysis
             </p>
           </div>
         </div>
@@ -783,10 +615,26 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         </div>
       </div>
 
+      {error && (
+        <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-950/20 px-3 py-2 text-xs text-rose-300">
+          Options feed error: {error}. {data ? 'Showing the last successful response; values may be stale.' : 'No live options data is available.'}
+        </div>
+      )}
+      {data?.warning && (
+        <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
+          Feed warning: {data.warning}
+        </div>
+      )}
+      {data?.isStale && (
+        <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
+          The API has marked this options snapshot as stale. Do not use it as a live trading signal.
+        </div>
+      )}
+
       {/* Active Expiries Pill Bar */}
       {selectedExpiries.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-          <span className="text-slate-500 mr-1">Combined Expiries (2-3 Max):</span>
+          <span className="text-slate-500 mr-1">Selected Expiries (single expiry recommended; max 3):</span>
           {selectedExpiries.map((exp) => (
             <span
               key={exp}
@@ -804,31 +652,31 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             </span>
           ))}
           <span className="text-slate-400 font-semibold ml-1">
-            (Unified Open Interest & Volume flow for near-term settlement)
+            (Expiry-specific OI and volume context)
           </span>
         </div>
       )}
 
-      {/* 2. MARKET DIRECTIONAL PROBABILITY WITH 3 S/R (PCR IN BRACKETS), BUYING/SELLING OPPORTUNITIES & SINGLE DROPDOWN NARRATIVE */}
+      {/* 2. OPTIONS POSITIONING CONTEXT AND POTENTIAL OI REFERENCE LEVELS */}
       {marketAnalysis && (
         <div className="mt-4 p-4 bg-gradient-to-r from-slate-950 via-[#0d121c] to-slate-950 border border-cyan-500/40 rounded-xl font-mono shadow-lg">
-          {/* Top Probability Header */}
+          {/* Options positioning header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 border-b border-slate-800 gap-2">
             <div className="flex items-center gap-2">
               <Compass className="w-4 h-4 text-cyan-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-100">
-                MARKET DIRECTION PROBABILITY & DATA BEHAVIOR ({getDisplayAssetName(asset)})
+                OPTIONS POSITIONING CONTEXT ({getDisplayAssetName(asset)})
               </span>
               <span
                 className={`px-2 py-0.5 text-[10px] font-black rounded ${
-                  marketAnalysis.primaryDirection.includes('BULLISH')
+                  marketAnalysis.pcrContext.includes('PUT')
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : marketAnalysis.primaryDirection.includes('BEARISH')
+                    : marketAnalysis.pcrContext.includes('CALL')
                     ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                 }`}
               >
-                {marketAnalysis.primaryDirection}
+                {marketAnalysis.pcrContext}
               </span>
             </div>
 
@@ -836,50 +684,34 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
                 OI PCR:{' '}
                 <strong className={marketAnalysis.overallPcr >= 1.0 ? 'text-emerald-400' : 'text-rose-400'}>
-                  {marketAnalysis.overallPcr.toFixed(2)}
+                  {formatNumber(marketAnalysis.overallPcr, 2)}
                 </strong>
                 <span className="text-[9px] text-slate-400 ml-1">
-                  ({marketAnalysis.overallPcr >= 1.0 ? 'Buying Opportunity' : 'Selling Opportunity'})
+                  ({marketAnalysis.overallPcr >= 1.15 ? 'Put OI heavier' : marketAnalysis.overallPcr < 0.85 ? 'Call OI heavier' : 'Mixed OI'})
                 </span>
               </span>
               <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 text-[11px]">
-                Vol PCR: <strong className="text-amber-400">{marketAnalysis.volPcr.toFixed(2)}</strong>
+                Vol PCR: <strong className="text-amber-400">{formatNumber(marketAnalysis.volPcr, 2)}</strong>
               </span>
             </div>
           </div>
 
-          {/* Probability Gauge Bar (Green Yellow Red Line) */}
-          <div className="my-3">
-            <div className="flex items-center justify-between text-xs mb-1.5 font-semibold">
-              <span className="text-emerald-400 flex items-center gap-1">
-                <span>▲ Upward Continuation:</span>
-                <span className="text-sm font-extrabold">{marketAnalysis.bullishProb}%</span>
-              </span>
-              <span className="text-amber-300 flex items-center gap-1">
-                <span>◆ Rangebound / Pin:</span>
-                <span className="text-sm font-extrabold">{marketAnalysis.rangeProb}%</span>
-              </span>
-              <span className="text-rose-400 flex items-center gap-1">
-                <span>▼ Downward Rejection:</span>
-                <span className="text-sm font-extrabold">{marketAnalysis.bearishProb}%</span>
-              </span>
+          {/* Options context is descriptive, not a directional trade probability. */}
+          <div className="my-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+              <div className="text-[10px] uppercase text-slate-500">Options OI context</div>
+              <div className="mt-1 font-bold text-cyan-300">{marketAnalysis.pcrContext}</div>
+              <div className="mt-1 text-[10px] text-slate-400">PCR describes the put/call OI balance; it is not a BUY/SELL signal.</div>
             </div>
-            <div className="w-full h-3 bg-slate-950 rounded-full border border-slate-800 flex overflow-hidden">
-              <div
-                className="bg-emerald-500 h-full transition-all duration-700"
-                style={{ width: `${marketAnalysis.bullishProb}%` }}
-                title={`Bullish: ${marketAnalysis.bullishProb}%`}
-              />
-              <div
-                className="bg-amber-500 h-full transition-all duration-700"
-                style={{ width: `${marketAnalysis.rangeProb}%` }}
-                title={`Rangebound: ${marketAnalysis.rangeProb}%`}
-              />
-              <div
-                className="bg-rose-500 h-full transition-all duration-700"
-                style={{ width: `${marketAnalysis.bearishProb}%` }}
-                title={`Bearish: ${marketAnalysis.bearishProb}%`}
-              />
+            <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+              <div className="text-[10px] uppercase text-slate-500">Spot chart confirmation</div>
+              <div className="mt-1 font-bold text-amber-300">NOT CONNECTED</div>
+              <div className="mt-1 text-[10px] text-slate-400">No OHLC candle feed is provided to this component, so technical direction cannot be confirmed here.</div>
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3">
+              <div className="text-[10px] uppercase text-amber-400">Execution decision</div>
+              <div className="mt-1 font-bold text-amber-300">WAIT — NO TRADE SIGNAL</div>
+              <div className="mt-1 text-[10px] text-slate-400">Use the OI levels as context and wait for spot-chart confirmation.</div>
             </div>
           </div>
 
@@ -893,103 +725,103 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                 </span>
               </div>
               <div className="flex items-center gap-2 text-[10px]">
-                <span className="text-emerald-400 font-semibold">High PCR = Buying Opportunity</span>
+                <span className="text-emerald-400 font-semibold">Higher PCR = More Put OI</span>
                 <span className="text-slate-500">•</span>
-                <span className="text-rose-400 font-semibold">Low PCR = Selling Opportunity</span>
+                <span className="text-rose-400 font-semibold">Lower PCR = More Call OI</span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-[11px]">
-              {/* 3 Resistance Levels (Low PCR = Selling Opportunity) */}
+              {/* 3 Resistance Levels (Lower PCR = More Call OI) */}
               <div className="p-2.5 bg-rose-950/20 border border-rose-500/30 rounded-lg flex flex-col justify-between">
                 <div>
                   <div className="text-[10px] font-bold text-rose-400 uppercase flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <ArrowDownRight className="w-3.5 h-3.5" /> 3 Nearest Resistances
+                      <ArrowDownRight className="w-3.5 h-3.5" /> 3 Nearest Strikes Above Spot
                     </span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-900/40 text-rose-300">SELLING OPPORTUNITY</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-rose-900/40 text-rose-300">CALL OI CONCENTRATION</span>
                   </div>
                   <div className="mt-2 space-y-1.5 font-mono text-slate-300">
                     <div className="flex justify-between items-center bg-slate-900/80 px-2 py-1 rounded">
-                      <span className="text-slate-400">R1 Resistance:</span>
+                      <span className="text-slate-400">R1 Above Spot:</span>
                       <span className="font-bold text-rose-300">
-                        ${formatNumber(marketAnalysis.r1, 0)} <span className="text-[10px] text-rose-400 font-semibold">(PCR: {marketAnalysis.r1Pcr.toFixed(2)})</span>
+                        ${formatNumber(marketAnalysis.r1, 0)} <span className="text-[10px] text-rose-400 font-semibold">(PCR: {formatNumber(marketAnalysis.r1Pcr, 2)})</span>
                       </span>
                     </div>
                     <div className="flex justify-between items-center bg-slate-900/80 px-2 py-1 rounded">
-                      <span className="text-slate-400">R2 Resistance:</span>
+                      <span className="text-slate-400">R2 Above Spot:</span>
                       <span className="font-bold text-rose-300">
-                        ${formatNumber(marketAnalysis.r2, 0)} <span className="text-[10px] text-rose-400 font-semibold">(PCR: {marketAnalysis.r2Pcr.toFixed(2)})</span>
+                        ${formatNumber(marketAnalysis.r2, 0)} <span className="text-[10px] text-rose-400 font-semibold">(PCR: {formatNumber(marketAnalysis.r2Pcr, 2)})</span>
                       </span>
                     </div>
                     <div className="flex justify-between items-center bg-slate-900/80 px-2 py-1 rounded">
-                      <span className="text-slate-400">R3 Strongest:</span>
+                      <span className="text-slate-400">R3 Above Spot:</span>
                       <span className="font-bold text-rose-400">
-                        ${formatNumber(marketAnalysis.r3, 0)} <span className="text-[10px] text-rose-400 font-semibold">(PCR: {marketAnalysis.r3Pcr.toFixed(2)})</span>
+                        ${formatNumber(marketAnalysis.r3, 0)} <span className="text-[10px] text-rose-400 font-semibold">(PCR: {formatNumber(marketAnalysis.r3Pcr, 2)})</span>
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="text-[9px] text-slate-400 mt-2 pt-1 border-t border-rose-900/30">
-                  Low PCR indicates call writing overhang (Supply Ceiling)
+                  Call OI concentration is a reference zone, not confirmed resistance
                 </div>
               </div>
 
-              {/* No Trade Zone Corridor */}
+              {/* Options Reference Corridor Corridor */}
               <div className="p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-lg flex flex-col justify-between">
                 <div>
                   <div className="text-[10px] font-bold text-amber-400 uppercase flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <MinusCircle className="w-3.5 h-3.5" /> No Trade Zone
+                      <MinusCircle className="w-3.5 h-3.5" /> Options Reference Corridor
                     </span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-900/40 text-amber-300">STAND ASIDE</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-900/40 text-amber-300">REFERENCE ONLY</span>
                   </div>
                   <div className="mt-3 text-center">
                     <div className="text-sm font-extrabold text-amber-300 font-mono">
                       ${formatNumber(marketAnalysis.ntzLower, 0)} – ${formatNumber(marketAnalysis.ntzUpper, 0)}
                     </div>
                     <div className="text-[10px] text-slate-400 mt-1">
-                      Equilibrium Pin around Max Pain: <strong className="text-slate-200">${formatNumber(marketAnalysis.maxPain, 0)}</strong>
+                      Reported Max Pain: <strong className="text-slate-200">${formatNumber(marketAnalysis.maxPain, 0)}</strong>
                     </div>
                   </div>
                 </div>
                 <div className="text-[9px] text-amber-400/80 mt-2 pt-1 border-t border-amber-900/30 text-center font-semibold">
-                  Zero Edge Inside • Wait for Clean Liquidity Break
+                  No trade decision is derived from this options corridor
                 </div>
               </div>
 
-              {/* 3 Support Levels (High PCR = Buying Opportunity) */}
+              {/* 3 Support Levels (Higher PCR = More Put OI) */}
               <div className="p-2.5 bg-emerald-950/20 border border-emerald-500/30 rounded-lg flex flex-col justify-between">
                 <div>
                   <div className="text-[10px] font-bold text-emerald-400 uppercase flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <ArrowUpRight className="w-3.5 h-3.5" /> 3 Nearest Supports
+                      <ArrowUpRight className="w-3.5 h-3.5" /> 3 Nearest Strikes Below Spot
                     </span>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-900/40 text-emerald-300">BUYING OPPORTUNITY</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-900/40 text-emerald-300">PUT OI CONCENTRATION</span>
                   </div>
                   <div className="mt-2 space-y-1.5 font-mono text-slate-300">
                     <div className="flex justify-between items-center bg-slate-900/80 px-2 py-1 rounded">
-                      <span className="text-slate-400">S1 Support:</span>
+                      <span className="text-slate-400">S1 Below Spot:</span>
                       <span className="font-bold text-emerald-300">
-                        ${formatNumber(marketAnalysis.s1, 0)} <span className="text-[10px] text-emerald-400 font-semibold">(PCR: {marketAnalysis.s1Pcr.toFixed(2)})</span>
+                        ${formatNumber(marketAnalysis.s1, 0)} <span className="text-[10px] text-emerald-400 font-semibold">(PCR: {formatNumber(marketAnalysis.s1Pcr, 2)})</span>
                       </span>
                     </div>
                     <div className="flex justify-between items-center bg-slate-900/80 px-2 py-1 rounded">
-                      <span className="text-slate-400">S2 Support:</span>
+                      <span className="text-slate-400">S2 Below Spot:</span>
                       <span className="font-bold text-emerald-300">
-                        ${formatNumber(marketAnalysis.s2, 0)} <span className="text-[10px] text-emerald-400 font-semibold">(PCR: {marketAnalysis.s2Pcr.toFixed(2)})</span>
+                        ${formatNumber(marketAnalysis.s2, 0)} <span className="text-[10px] text-emerald-400 font-semibold">(PCR: {formatNumber(marketAnalysis.s2Pcr, 2)})</span>
                       </span>
                     </div>
                     <div className="flex justify-between items-center bg-slate-900/80 px-2 py-1 rounded">
-                      <span className="text-slate-400">S3 Strongest:</span>
+                      <span className="text-slate-400">S3 Below Spot:</span>
                       <span className="font-bold text-emerald-400">
-                        ${formatNumber(marketAnalysis.s3, 0)} <span className="text-[10px] text-emerald-400 font-semibold">(PCR: {marketAnalysis.s3Pcr.toFixed(2)})</span>
+                        ${formatNumber(marketAnalysis.s3, 0)} <span className="text-[10px] text-emerald-400 font-semibold">(PCR: {formatNumber(marketAnalysis.s3Pcr, 2)})</span>
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="text-[9px] text-slate-400 mt-2 pt-1 border-t border-emerald-900/30">
-                  High PCR indicates heavy put writing floor (Buyer Defense)
+                  Put OI concentration is a reference zone, not confirmed support
                 </div>
               </div>
             </div>
@@ -1099,7 +931,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                   : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
               }`}
             >
-              {(summary?.overallPcr ?? 1) >= 1.0 ? 'BUYING OPPORTUNITY' : 'SELLING OPPORTUNITY'}
+              {(summary?.overallPcr ?? 1) >= 1.0 ? 'PUT OI CONCENTRATION' : 'CALL OI CONCENTRATION'}
             </span>
           </div>
           <div className="mt-2">
@@ -1108,8 +940,8 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             </div>
             <div className="text-[10px] text-slate-400 font-mono mt-0.5 leading-tight truncate">
               {(summary?.overallPcr ?? 1) >= 1.0
-                ? 'Put writing dominates (Buying support)'
-                : 'Call writing dominates (Overhead supply)'}
+                ? 'Put OI is higher than call OI'
+                : 'Call OI is higher than put OI'}
             </div>
           </div>
         </div>
@@ -1120,7 +952,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>MAX PAIN STRIKE</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono font-semibold">
-              PIN LEVEL
+              EXPIRY REFERENCE
             </span>
           </div>
           <div className="mt-2">
@@ -1144,15 +976,15 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
           <div>
             <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider block">
-              Market Structure Corridor (S/R Tunnel & Total OI Distribution)
+              Options OI Reference Corridor & Total OI Distribution
             </span>
             <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-              Structural bounds defined by institutional option sellers' heaviest strike clusters
+              Potential OI concentration zones from the selected options chain
             </p>
           </div>
           <div className="flex items-center gap-3 text-[10px] font-mono">
-            <span className="text-emerald-400">Calls (Ceiling)</span>
-            <span className="text-rose-400">Puts (Floor)</span>
+            <span className="text-emerald-400">Call OI concentration</span>
+            <span className="text-rose-400">Put OI concentration</span>
           </div>
         </div>
 
@@ -1181,49 +1013,49 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                 </div>
               </div>
 
-              {/* S/R Labels: Strong Support & Strongest Resistance with PCR in brackets */}
+              {/* S/R Labels: Largest Put OI Below Spot & Largest Call OI Above Spot with PCR in brackets */}
               <div className="grid grid-cols-4 gap-2 mt-4 text-center font-mono">
                 <div className="p-2 bg-emerald-950/20 border border-emerald-500/30 rounded-lg">
                   <div className="text-[10px] text-emerald-400 font-bold uppercase flex items-center justify-center gap-1">
-                    <Shield className="w-3 h-3" /> Strong Support
+                    <Shield className="w-3 h-3" /> Largest Put OI Below Spot
                   </div>
                   <div className="text-sm font-black text-emerald-300 mt-0.5">
                     ${formatNumber(marketAnalysis?.strongSupportStrike, asset === 'XAUT' ? 1 : 0)}
                   </div>
                   <div className="text-[9px] text-emerald-400 font-bold">
-                    (PCR: {marketAnalysis?.strongSupportPcr.toFixed(2)})
+                    (PCR: {formatNumber(marketAnalysis?.strongSupportPcr, 2)})
                   </div>
                 </div>
 
                 <div className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg">
-                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Nearest Support</div>
+                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Nearest Strike Below Spot</div>
                   <div className="text-sm font-bold text-slate-200 mt-0.5">
                     ${formatNumber(marketAnalysis?.s1, asset === 'XAUT' ? 1 : 0)}
                   </div>
                   <div className="text-[9px] text-slate-400 font-semibold">
-                    (PCR: {marketAnalysis?.s1Pcr.toFixed(2)})
+                    (PCR: {formatNumber(marketAnalysis?.s1Pcr, 2)})
                   </div>
                 </div>
 
                 <div className="p-2 bg-slate-900/80 border border-slate-800 rounded-lg">
-                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Nearest Resistance</div>
+                  <div className="text-[10px] text-slate-400 font-semibold uppercase">Nearest Strike Above Spot</div>
                   <div className="text-sm font-bold text-slate-200 mt-0.5">
                     ${formatNumber(marketAnalysis?.r1, asset === 'XAUT' ? 1 : 0)}
                   </div>
                   <div className="text-[9px] text-slate-400 font-semibold">
-                    (PCR: {marketAnalysis?.r1Pcr.toFixed(2)})
+                    (PCR: {formatNumber(marketAnalysis?.r1Pcr, 2)})
                   </div>
                 </div>
 
                 <div className="p-2 bg-rose-950/20 border border-rose-500/30 rounded-lg">
                   <div className="text-[10px] text-rose-400 font-bold uppercase flex items-center justify-center gap-1">
-                    <Layers className="w-3 h-3" /> Strongest Resistance
+                    <Layers className="w-3 h-3" /> Largest Call OI Above Spot
                   </div>
                   <div className="text-sm font-black text-rose-300 mt-0.5">
                     ${formatNumber(marketAnalysis?.strongestResStrike, asset === 'XAUT' ? 1 : 0)}
                   </div>
                   <div className="text-[9px] text-rose-400 font-bold">
-                    (PCR: {marketAnalysis?.strongestResPcr.toFixed(2)})
+                    (PCR: {formatNumber(marketAnalysis?.strongestResPcr, 2)})
                   </div>
                 </div>
               </div>
@@ -1304,13 +1136,13 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider block">
               Open Interest (OI) Shift in Absolute Contracts ({timeframe})
             </span>
-            <span className="text-[10px] text-slate-500">Values displayed in absolute contracts added or unwound</span>
+            <span className="text-[10px] text-slate-500">Bars show absolute size; hover to see signed OI change (increase or decrease)</span>
           </div>
 
           {flowAnalytics?.topShiftStrike && (
             <div className="px-3 py-1 bg-cyan-950/70 border border-cyan-500/40 rounded-lg text-cyan-300 font-bold text-xs flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Most OI Shifting To: Strike ${formatNumber(flowAnalytics.topShiftStrike, 0)} (+{formatNumber(flowAnalytics.maxTotalShiftContracts, 0)} contracts)</span>
+              <span>Largest absolute OI change at: Strike ${formatNumber(flowAnalytics.topShiftStrike, 0)} (${formatNumber(flowAnalytics.maxTotalShiftContracts, 0)} contracts absolute change)</span>
             </div>
           )}
         </div>
@@ -1321,11 +1153,11 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             {flowAnalytics?.rowsWithShifts?.map((r) => {
               const maxShift = Math.max(
                 1,
-                ...flowAnalytics.rowsWithShifts.map((m) => Math.max(m.derivedCallShift, m.derivedPutShift))
+                ...flowAnalytics.rowsWithShifts.map((m) => Math.max(Math.abs(m.derivedCallShift), Math.abs(m.derivedPutShift)))
               );
 
-              const callHeight = Math.min(100, Math.max(8, Math.round((r.derivedCallShift / maxShift) * 100)));
-              const putHeight = Math.min(100, Math.max(8, Math.round((r.derivedPutShift / maxShift) * 100)));
+              const callHeight = Math.min(100, Math.max(0, Math.round((Math.abs(r.derivedCallShift) / maxShift) * 100)));
+              const putHeight = Math.min(100, Math.max(0, Math.round((Math.abs(r.derivedPutShift) / maxShift) * 100)));
               const isSpot = spotPrice > 0 && Math.abs(r.strike - spotPrice) <= (filteredMatrix[1]?.strike - filteredMatrix[0]?.strike || 500);
 
               return (
@@ -1334,12 +1166,12 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                     <div
                       className="w-1/2 bg-emerald-500/80 rounded-t transition-all duration-500 group-hover:bg-emerald-400"
                       style={{ height: `${callHeight}%` }}
-                      title={`Call OI Shift: +${formatNumber(r.derivedCallShift, 0)} contracts`}
+                      title={`Call OI change: ${r.derivedCallShift > 0 ? '+' : ''}${formatNumber(r.derivedCallShift, 0)} contracts`}
                     />
                     <div
                       className="w-1/2 bg-rose-500/80 rounded-t transition-all duration-500 group-hover:bg-rose-400"
                       style={{ height: `${putHeight}%` }}
-                      title={`Put OI Shift: +${formatNumber(r.derivedPutShift, 0)} contracts`}
+                      title={`Put OI change: ${r.derivedPutShift > 0 ? '+' : ''}${formatNumber(r.derivedPutShift, 0)} contracts`}
                     />
                   </div>
                   <span className={`text-[9px] font-mono whitespace-nowrap ${isSpot ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>
@@ -1353,16 +1185,16 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
           {/* Right 1 Col: Overall Shift Pie Chart in Numbers */}
           <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
             <span className="text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
-              <PieIcon className="w-3.5 h-3.5 text-cyan-400" /> Overall OI Shift Split
+              <PieIcon className="w-3.5 h-3.5 text-cyan-400" /> Positive OI Change Split
             </span>
-            <span className="text-[9px] text-slate-500 font-mono mb-1">(In Absolute Added Contracts)</span>
+            <span className="text-[9px] text-slate-500 font-mono mb-1">(Positive OI changes only; decreases excluded from this split)</span>
 
             <div className="relative w-32 h-32 my-1 flex items-center justify-center">
               <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
                 {(() => {
-                  const cAdded = flowAnalytics?.totalCallOiAdded || 2850;
-                  const pAdded = flowAnalytics?.totalPutOiAdded || 4570;
-                  const total = cAdded + pAdded;
+                  const cAdded = flowAnalytics?.totalCallOiAdded ?? 0;
+                  const pAdded = flowAnalytics?.totalPutOiAdded ?? 0;
+                  const total = Math.max(1, cAdded + pAdded);
                   const pCall = (cAdded / total) * 100;
                   const pPut = (pAdded / total) * 100;
                   const r = 15.9155;
@@ -1397,13 +1229,16 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                 })()}
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                <span className="text-[8px] text-slate-400">Total Shift</span>
+                <span className="text-[8px] text-slate-400">Positive OI change</span>
                 <span className="text-[11px] font-bold text-cyan-300">
-                  +{formatNumber((flowAnalytics?.totalCallOiAdded || 2850) + (flowAnalytics?.totalPutOiAdded || 4570), 0)}
+                  +{formatNumber((flowAnalytics?.totalCallOiAdded ?? 0) + (flowAnalytics?.totalPutOiAdded ?? 0), 0)}
                 </span>
               </div>
             </div>
 
+            <div className="w-full px-2 mt-1 text-[9px] text-slate-400 font-mono text-center">
+              OI reductions — Calls: {formatNumber(flowAnalytics?.totalCallOiReduced, 0)} contracts · Puts: {formatNumber(flowAnalytics?.totalPutOiReduced, 0)} contracts
+            </div>
             <div className="flex items-center justify-between w-full text-[10px] font-mono px-2 mt-1">
               <div className="flex items-center gap-1 text-emerald-400">
                 <span className="w-2 h-2 rounded bg-emerald-500" />
@@ -1460,7 +1295,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                   <th className="py-2 px-3 text-right">Call Vol</th>
                 )}
                 <th className="py-2 px-3 text-right border-r border-slate-800">
-                  Δ {timeframe} (OI / Vol)
+                  OI Change % / Volume Change %
                 </th>
 
                 {/* Strike in Center */}
@@ -1469,7 +1304,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                 </th>
 
                 <th className="py-2 px-3 text-left">
-                  Δ {timeframe} (OI / Vol)
+                  OI Change % / Volume Change %
                 </th>
                 {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
                   <th className="py-2 px-3 text-left">Put Vol</th>
