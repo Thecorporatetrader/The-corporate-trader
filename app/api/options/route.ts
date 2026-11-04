@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -80,7 +79,14 @@ const cache = new Map<
 >();
 
 function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
+  if (
+    value === null ||
+    value === undefined ||
+    value === '' ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
+    return null;
+  }
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -91,25 +97,50 @@ function positiveNumber(value: unknown): number | null {
   return parsed !== null && parsed > 0 ? parsed : null;
 }
 
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 function parseExpiry(value: unknown): string | null {
-  if (typeof value !== 'string' || !value) return null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+
+  const input = value.trim();
 
   // ISO date or ISO timestamp.
-  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  const isoMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
 
-  // Delta option symbols end with DDMMYY, e.g. C-BTC-90000-310125.
-  const compactMatch = value.match(/(?:^|-)(\d{2})(\d{2})(\d{2})$/);
-  if (compactMatch) {
-    const [, day, month, year] = compactMatch;
-    return `20${year}-${month}-${day}`;
+  if (isoMatch) {
+    const isoDate = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    return isValidIsoDate(isoDate) ? isoDate : null;
   }
 
-  // Also accept YYYYMMDD.
-  const ymdMatch = value.match(/(?:^|-)(\d{4})(\d{2})(\d{2})$/);
+  // Delta option symbol suffix: DDMMYY.
+  const compactMatch = input.match(/(?:^|-)(\d{2})(\d{2})(\d{2})$/);
+
+  if (compactMatch) {
+    const [, day, month, year] = compactMatch;
+    const isoDate = `20${year}-${month}-${day}`;
+
+    return isValidIsoDate(isoDate) ? isoDate : null;
+  }
+
+  // YYYYMMDD.
+  const ymdMatch = input.match(/(?:^|-)(\d{4})(\d{2})(\d{2})$/);
+
   if (ymdMatch) {
     const [, year, month, day] = ymdMatch;
-    return `${year}-${month}-${day}`;
+    const isoDate = `${year}-${month}-${day}`;
+
+    return isValidIsoDate(isoDate) ? isoDate : null;
   }
 
   return null;
@@ -117,30 +148,36 @@ function parseExpiry(value: unknown): string | null {
 
 function getTickerExpiry(ticker: DeltaTicker): string | null {
   return (
-    parseExpiry(ticker.expiry_date ?? '') ??
-    parseExpiry(ticker.settlement_time ?? '') ??
-    parseExpiry(ticker.symbol ?? '')
+    parseExpiry(ticker.expiry_date) ??
+    parseExpiry(ticker.settlement_time) ??
+    parseExpiry(ticker.symbol)
   );
 }
 
 function getOptionType(
-  ticker: DeltaTicker
+  ticker: DeltaTicker,
 ): 'call' | 'put' | null {
   const type = ticker.contract_type?.toLowerCase();
   const symbol = ticker.symbol ?? '';
 
-  if (type === 'call_options' || symbol.startsWith('C-')) return 'call';
-  if (type === 'put_options' || symbol.startsWith('P-')) return 'put';
+  if (type === 'call_options' || symbol.startsWith('C-')) {
+    return 'call';
+  }
+
+  if (type === 'put_options' || symbol.startsWith('P-')) {
+    return 'put';
+  }
 
   return null;
 }
 
 /**
- * Delta's oi_value_usd is the USD value of open interest.
- * Do not estimate it from OI contracts x strike.
+ * Use Delta's USD-denominated OI value.
+ * Never estimate OI USD from contracts multiplied by strike.
  */
 function getOiUsd(ticker: DeltaTicker): number | null {
   const directUsd = toNumber(ticker.oi_value_usd);
+
   if (directUsd !== null) return directUsd;
 
   if (ticker.oi_value_symbol?.toUpperCase() === 'USD') {
@@ -151,11 +188,12 @@ function getOiUsd(ticker: DeltaTicker): number | null {
 }
 
 /**
- * Delta's turnover_usd is the USD turnover value.
- * Do not estimate it from volume contracts x option premium.
+ * Use Delta's USD-denominated turnover.
+ * Never estimate USD turnover from contracts multiplied by premium.
  */
 function getVolumeUsd(ticker: DeltaTicker): number | null {
   const directUsd = toNumber(ticker.turnover_usd);
+
   if (directUsd !== null) return directUsd;
 
   if (ticker.turnover_symbol?.toUpperCase() === 'USD') {
@@ -166,16 +204,24 @@ function getVolumeUsd(ticker: DeltaTicker): number | null {
 }
 
 function sumKnown(values: Array<number | null>): number | null {
-  const known = values.filter((value): value is number => value !== null);
+  const known = values.filter(
+    (value): value is number => value !== null,
+  );
+
   if (known.length === 0) return null;
+
   return known.reduce((total, value) => total + value, 0);
 }
 
 function ratio(
   numerator: number | null,
-  denominator: number | null
+  denominator: number | null,
 ): number | null {
-  if (numerator === null || denominator === null || denominator === 0) {
+  if (
+    numerator === null ||
+    denominator === null ||
+    denominator === 0
+  ) {
     return null;
   }
 
@@ -183,6 +229,10 @@ function ratio(
 }
 
 function expiryToDeltaFormat(isoDate: string): string {
+  if (!isValidIsoDate(isoDate)) {
+    throw new Error('Invalid expiry date.');
+  }
+
   const [year, month, day] = isoDate.split('-');
   return `${day}-${month}-${year}`;
 }
@@ -190,15 +240,22 @@ function expiryToDeltaFormat(isoDate: string): string {
 async function fetchDeltaTickers(
   baseUrl: string,
   asset: string,
-  expiry?: string
+  expiry?: string,
 ): Promise<DeltaTicker[]> {
   const url = new URL('/v2/tickers', baseUrl);
 
-  url.searchParams.set('contract_types', 'call_options,put_options');
+  url.searchParams.set(
+    'contract_types',
+    'call_options,put_options',
+  );
+
   url.searchParams.set('underlying_asset_symbols', asset);
 
   if (expiry) {
-    url.searchParams.set('expiry_date', expiryToDeltaFormat(expiry));
+    url.searchParams.set(
+      'expiry_date',
+      expiryToDeltaFormat(expiry),
+    );
   }
 
   const response = await fetch(url.toString(), {
@@ -209,7 +266,10 @@ async function fetchDeltaTickers(
   });
 
   if (!response.ok) {
-    const error = new Error(`Delta API returned HTTP ${response.status}`);
+    const error = new Error(
+      `Delta API returned HTTP ${response.status}`,
+    );
+
     (error as Error & { status?: number }).status = response.status;
     throw error;
   }
@@ -234,20 +294,26 @@ function buildMatrix(tickers: DeltaTicker[]): {
   >();
 
   const seenSymbols = new Set<string>();
+
   let spotPrice: number | null = null;
   let contractsCount = 0;
 
   for (const ticker of tickers) {
     const symbol = ticker.symbol ?? '';
+
     if (!symbol || seenSymbols.has(symbol)) continue;
+
     seenSymbols.add(symbol);
 
     const optionType = getOptionType(ticker);
+
     if (!optionType) continue;
 
     const strike = positiveNumber(ticker.strike_price);
+
     if (strike === null) continue;
 
+    // Keep searching until a valid spot price is found.
     if (spotPrice === null) {
       spotPrice = positiveNumber(ticker.spot_price);
     }
@@ -266,31 +332,43 @@ function buildMatrix(tickers: DeltaTicker[]): {
 
     const bucket = byStrike.get(strike)!;
 
-    if (optionType === 'call') bucket.calls.push(side);
-    else bucket.puts.push(side);
+    if (optionType === 'call') {
+      bucket.calls.push(side);
+    } else {
+      bucket.puts.push(side);
+    }
 
     contractsCount += 1;
   }
 
   const matrix: MatrixRow[] = Array.from(byStrike.entries())
     .map(([strike, sides]) => {
-      const callOiUsd = sumKnown(sides.calls.map((item) => item.oiUsd));
-      const putOiUsd = sumKnown(sides.puts.map((item) => item.oiUsd));
-      const callVolumeUsd = sumKnown(
-        sides.calls.map((item) => item.volumeUsd)
+      const callOiUsd = sumKnown(
+        sides.calls.map((item) => item.oiUsd),
       );
+
+      const putOiUsd = sumKnown(
+        sides.puts.map((item) => item.oiUsd),
+      );
+
+      const callVolumeUsd = sumKnown(
+        sides.calls.map((item) => item.volumeUsd),
+      );
+
       const putVolumeUsd = sumKnown(
-        sides.puts.map((item) => item.volumeUsd)
+        sides.puts.map((item) => item.volumeUsd),
       );
 
       const call: OptionSide | null =
         sides.calls.length > 0
           ? {
-              symbol: sides.calls.map((item) => item.symbol).join(', '),
+              symbol: sides.calls
+                .map((item) => item.symbol)
+                .join(', '),
               oiUsd: callOiUsd,
               volumeUsd: callVolumeUsd,
               oiContracts: sumKnown(
-                sides.calls.map((item) => item.oiContracts)
+                sides.calls.map((item) => item.oiContracts),
               ),
               markPrice: sides.calls[0].markPrice,
             }
@@ -299,11 +377,13 @@ function buildMatrix(tickers: DeltaTicker[]): {
       const put: OptionSide | null =
         sides.puts.length > 0
           ? {
-              symbol: sides.puts.map((item) => item.symbol).join(', '),
+              symbol: sides.puts
+                .map((item) => item.symbol)
+                .join(', '),
               oiUsd: putOiUsd,
               volumeUsd: putVolumeUsd,
               oiContracts: sumKnown(
-                sides.puts.map((item) => item.oiContracts)
+                sides.puts.map((item) => item.oiContracts),
               ),
               markPrice: sides.puts[0].markPrice,
             }
@@ -323,28 +403,36 @@ function buildMatrix(tickers: DeltaTicker[]): {
     })
     .sort((a, b) => a.strike - b.strike);
 
-  return { matrix, spotPrice, contractsCount };
+  return {
+    matrix,
+    spotPrice,
+    contractsCount,
+  };
 }
 
 function makePayload(
   asset: string,
   selectedExpiries: string[],
   availableExpiries: string[],
-  tickers: DeltaTicker[]
+  tickers: DeltaTicker[],
 ): ApiPayload {
-  const {
-    matrix,
-    spotPrice,
-    contractsCount,
-  } = buildMatrix(tickers);
+  const { matrix, spotPrice, contractsCount } =
+    buildMatrix(tickers);
 
-  const totalCallOiUsd = sumKnown(matrix.map((row) => row.callOiUsd));
-  const totalPutOiUsd = sumKnown(matrix.map((row) => row.putOiUsd));
-  const totalCallVolumeUsd = sumKnown(
-    matrix.map((row) => row.callVolumeUsd)
+  const totalCallOiUsd = sumKnown(
+    matrix.map((row) => row.callOiUsd),
   );
+
+  const totalPutOiUsd = sumKnown(
+    matrix.map((row) => row.putOiUsd),
+  );
+
+  const totalCallVolumeUsd = sumKnown(
+    matrix.map((row) => row.callVolumeUsd),
+  );
+
   const totalPutVolumeUsd = sumKnown(
-    matrix.map((row) => row.putVolumeUsd)
+    matrix.map((row) => row.putVolumeUsd),
   );
 
   return {
@@ -354,22 +442,29 @@ function makePayload(
     availableExpiries,
     selectedExpiries,
     isMultiExpiry: selectedExpiries.length > 1,
+
     dataBasis: {
       openInterest: 'USD open-interest value (Delta oi_value_usd)',
       volume: 'USD turnover (Delta turnover_usd)',
-      period: 'Current Delta ticker/session values; not an intraday historical window',
+      period:
+        'Current Delta ticker/session values; not an intraday historical window',
       timeframeChangesAvailable: false,
     },
+
     summary: {
       totalCallOiUsd,
       totalPutOiUsd,
       totalCallVolumeUsd,
       totalPutVolumeUsd,
       overallOiPcr: ratio(totalPutOiUsd, totalCallOiUsd),
-      overallVolumePcr: ratio(totalPutVolumeUsd, totalCallVolumeUsd),
+      overallVolumePcr: ratio(
+        totalPutVolumeUsd,
+        totalCallVolumeUsd,
+      ),
       contractsCount,
       strikesCount: matrix.length,
     },
+
     matrix,
     updatedAt: new Date().toISOString(),
   };
@@ -377,26 +472,36 @@ function makePayload(
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
+
   const asset = (params.get('asset') || 'BTC').toUpperCase();
 
-  // Only symbols supported by the TCT selector are accepted.
   const allowedAssets = new Set(['BTC', 'ETH', 'SOL', 'XAUT']);
 
   if (!allowedAssets.has(asset)) {
     return NextResponse.json(
-      { success: false, error: 'Unsupported underlying asset.' },
-      { status: 400 }
+      {
+        success: false,
+        error: 'Unsupported underlying asset.',
+      },
+      { status: 400 },
     );
   }
 
   const rawExpiry = params.get('expiry');
+
   const requestedExpiries = rawExpiry
-    ? [...new Set(rawExpiry.split(',').map((value) => value.trim()))]
-        .filter(Boolean)
+    ? [
+        ...new Set(
+          rawExpiry
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ].sort()
     : [];
 
   if (
-    requestedExpiries.some((value) => !/^\d{4}-\d{2}-\d{2}$/.test(value)) ||
+    requestedExpiries.some((value) => !isValidIsoDate(value)) ||
     requestedExpiries.length > MAX_MULTI_EXPIRIES
   ) {
     return NextResponse.json(
@@ -404,16 +509,21 @@ export async function GET(request: NextRequest) {
         success: false,
         error: `Choose up to ${MAX_MULTI_EXPIRIES} valid expiry dates.`,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  const cacheKey = `${asset}:${requestedExpiries.join(',') || 'nearest'}`;
+  const cacheKey =
+    `${asset}:${requestedExpiries.join(',') || 'nearest'}`;
+
   const cached = cache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return NextResponse.json(cached.payload, {
-      headers: { 'X-Cache': 'HIT' },
+      headers: {
+        'X-Cache': 'HIT',
+        'Cache-Control': 'no-store',
+      },
     });
   }
 
@@ -423,19 +533,19 @@ export async function GET(request: NextRequest) {
   ).replace(/\/+$/, '');
 
   try {
-    // Fetch the ticker chain first to discover available live expiries.
+    // First fetch: discover available expiries.
     const allTickers = await fetchDeltaTickers(baseUrl, asset);
 
-    const activeTickers = allTickers.filter((ticker) => {
-      const expiry = getTickerExpiry(ticker);
-      return expiry !== null && expiry >= new Date().toISOString().slice(0, 10);
-    });
+    const today = new Date().toISOString().slice(0, 10);
 
     const availableExpiries = [
       ...new Set(
-        activeTickers
+        allTickers
           .map(getTickerExpiry)
-          .filter((value): value is string => value !== null)
+          .filter(
+            (expiry): expiry is string =>
+              expiry !== null && expiry >= today,
+          ),
       ),
     ].sort();
 
@@ -446,52 +556,72 @@ export async function GET(request: NextRequest) {
           error: `Delta returned no active option expiries for ${asset}.`,
           asset,
         },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    // Default: nearest expiry. Explicitly selected expiries are kept as-is.
+    // Default to nearest expiry.
     const selectedExpiries =
       requestedExpiries.length > 0
         ? requestedExpiries
         : [availableExpiries[0]];
 
     const unavailable = selectedExpiries.filter(
-      (expiry) => !availableExpiries.includes(expiry)
+      (expiry) => !availableExpiries.includes(expiry),
     );
 
     if (unavailable.length > 0) {
       return NextResponse.json(
         {
           success: false,
-          error: `Expiry not available for ${asset}: ${unavailable.join(', ')}`,
+          error:
+            `Expiry not available for ${asset}: ` +
+            unavailable.join(', '),
           availableExpiries,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Use the exact expiry filter supported by Delta for each selected expiry.
+    // Fetch each selected expiry separately.
     const selectedTickerGroups = await Promise.all(
       selectedExpiries.map((expiry) =>
-        fetchDeltaTickers(baseUrl, asset, expiry)
-      )
+        fetchDeltaTickers(baseUrl, asset, expiry),
+      ),
     );
 
-    const selectedTickers = selectedTickerGroups.flat().filter((ticker) => {
-      const tickerExpiry = getTickerExpiry(ticker);
-      return tickerExpiry !== null && selectedExpiries.includes(tickerExpiry);
-    });
+    // Keep only the exact selected expiries and remove duplicate symbols.
+    const seenSymbols = new Set<string>();
+
+    const selectedTickers = selectedTickerGroups
+      .flat()
+      .filter((ticker) => {
+        const tickerExpiry = getTickerExpiry(ticker);
+        const symbol = ticker.symbol ?? '';
+
+        if (
+          !tickerExpiry ||
+          !selectedExpiries.includes(tickerExpiry) ||
+          !symbol ||
+          seenSymbols.has(symbol)
+        ) {
+          return false;
+        }
+
+        seenSymbols.add(symbol);
+        return true;
+      });
 
     if (selectedTickers.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          error: 'No option ticker data returned for the selected expiry.',
+          error:
+            'No option ticker data returned for the selected expiry.',
           availableExpiries,
           selectedExpiries,
         },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -499,15 +629,21 @@ export async function GET(request: NextRequest) {
       asset,
       selectedExpiries,
       availableExpiries,
-      selectedTickers
+      selectedTickers,
     );
 
-    cache.set(cacheKey, { timestamp: Date.now(), payload });
+    cache.set(cacheKey, {
+      timestamp: Date.now(),
+      payload,
+    });
 
     // Keep the in-memory cache bounded.
     if (cache.size > 100) {
       const oldestKey = cache.keys().next().value;
-      if (oldestKey) cache.delete(oldestKey);
+
+      if (oldestKey) {
+        cache.delete(oldestKey);
+      }
     }
 
     return NextResponse.json(payload, {
@@ -517,19 +653,27 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    const status = (error as Error & { status?: number }).status;
+    const status = (
+      error as Error & { status?: number }
+    ).status;
+
     const stale = cache.get(cacheKey);
 
-    if ((status === 429 || (status && status >= 500)) && stale) {
+    // Serve a known successful snapshot during temporary API/network failure.
+    if (stale) {
       return NextResponse.json(
         {
           ...stale.payload,
           isStale: true,
-          warning: 'Delta is temporarily unavailable. Showing the last successful snapshot.',
+          warning:
+            'Delta is temporarily unavailable. Showing the last successful snapshot.',
         },
         {
-          headers: { 'X-Cache': 'STALE' },
-        }
+          headers: {
+            'X-Cache': 'STALE',
+            'Cache-Control': 'no-store',
+          },
+        },
       );
     }
 
@@ -543,7 +687,10 @@ export async function GET(request: NextRequest) {
             ? error.message
             : 'Unable to load Delta options data.',
       },
-      { status: status === 429 ? 429 : 502 }
+      {
+        status: status === 429 ? 429 : 502,
+        headers: { 'Cache-Control': 'no-store' },
+      },
     );
   }
 }
