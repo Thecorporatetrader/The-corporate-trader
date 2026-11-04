@@ -613,7 +613,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
     <div
       className={`w-full bg-[#0a0d14] text-slate-100 rounded-xl border border-slate-800 shadow-2xl p-4 md:p-6 font-sans ${className}`}
     >
-      {/* 1. TOP HEADER WITH CURRENT SPOT PRICE, PAIR DISPLAY (XAUUSD AS DEFAULT) & REAL-TIME BADGE (DELTA FEED NAME REMOVED) */}
+      {/* 1. TOP HEADER WITH CURRENT SPOT PRICE, PAIR DISPLAY & REAL-TIME BADGE */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-cyan-950/60 border border-cyan-500/30 rounded-lg text-cyan-400">
@@ -624,7 +624,6 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               <h2 className="text-xl font-bold tracking-tight text-white font-mono">
                 OPTIONS MARKET STRUCTURE & PROBABILITY RADAR
               </h2>
-              {/* CURRENT SPOT PRICE AT TOP */}
               <div className="px-3 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center gap-2">
                 <span className="text-[11px] font-mono text-cyan-400 font-bold uppercase">
                   {getDisplayAssetName(asset)} SPOT:
@@ -633,7 +632,6 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                   ${formatNumber(spotPrice, asset === 'XAUT' ? 2 : 2)}
                 </span>
               </div>
-              {/* REAL-TIME BADGE (DELTA EXCHANGE FEED REMOVED) */}
               <span className="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
                 REAL-TIME
               </span>
@@ -646,7 +644,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Asset Switcher: XAUUSD (Gold) First by Default */}
+          {/* Asset Switcher */}
           <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
             {(['XAUT', 'BTC', 'ETH', 'SOL'] as const).map((token) => (
               <button
@@ -666,7 +664,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             ))}
           </div>
 
-          {/* Timeframe Selector (Added 24h) */}
+          {/* Timeframe Selector */}
           <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg items-center">
             <span className="text-[10px] text-slate-500 font-mono px-1 flex items-center gap-0.5">
               <Clock className="w-3 h-3 text-cyan-400" />
@@ -680,132 +678,121 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title={`Track shifts over the last ${tf}`}
               >
                 {tf}
               </button>
             ))}
           </div>
-
-          {/* Multi-Expiry Selector Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setExpiryDropdownOpen(!expiryDropdownOpen)}
-              className="flex items-center gap-2 bg-slate-900 text-slate-200 text-xs font-mono border border-slate-800 hover:border-slate-700 rounded-lg px-3 py-2 transition-colors"
-            >
-              <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-              <span>
-                {selectedExpiries.length === 0
-                  ? 'Select Expiry'
-                  : selectedExpiries.length === 1
-                  ? `EXP: ${selectedExpiries[0]}`
-                  : `Combined ${selectedExpiries.length} Expiries (Max 3)`}
-              </span>
-              <span className="text-slate-500 text-[10px]">▼</span>
-            </button>
-
-            {expiryDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-slate-950 border border-slate-800 rounded-lg shadow-2xl p-2 z-50">
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[11px] font-mono text-slate-400">
-                  <span>Combine Near-Term (Max 3):</span>
-                  <button
-                    onClick={selectTopThreeExpiries}
-                    className="text-cyan-400 hover:underline font-semibold"
-                  >
-                    Next 3 Dates
-                  </button>
-                </div>
-                <div className="max-h-48 overflow-y-auto space-y-1">
-                  {data?.availableExpiries && data.availableExpiries.length > 0 ? (
-                    data.availableExpiries.map((exp) => {
-                      const isSelected = selectedExpiries.includes(exp);
-                      return (
-                        <button
-                          key={exp}
-                          onClick={() => toggleExpiry(exp)}
-                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-mono transition-colors ${
-                            isSelected
-                              ? 'bg-cyan-950/70 text-cyan-300 border border-cyan-500/40'
-                              : 'text-slate-400 hover:bg-slate-900 hover:text-white'
-                          }`}
-                        >
-                          <span>{exp}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400" />}
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="text-xs text-slate-500 p-2">No expiries found</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Matrix View Toggle */}
-          <div className="inline-flex p-1 bg-slate-900 border border-slate-800 rounded-lg">
-            {(['all', 'oi', 'volume'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setMatrixViewMode(mode)}
-                className={`px-2.5 py-1 text-[11px] font-mono uppercase font-semibold rounded ${
-                  matrixViewMode === mode
-                    ? 'bg-slate-800 text-cyan-300 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {mode === 'all' ? 'Combined' : mode.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {/* Refresh Controls */}
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5">
-            <button
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={`w-2 h-2 rounded-full transition-all ${
-                autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'
-              }`}
-              title={autoRefresh ? 'Auto-refresh active' : 'Auto-refresh paused'}
-            />
-            <span className="text-[11px] font-mono text-slate-400">
-              {autoRefresh ? `${countdown}s` : 'PAUSED'}
-            </span>
-            <button
-              onClick={() => fetchData(false)}
-              disabled={loading}
-              className="ml-1 text-slate-400 hover:text-cyan-400 transition-colors"
-              title="Manual refresh"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Active Expiries Pill Bar */}
-      {selectedExpiries.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-mono">
-          <span className="text-slate-500 mr-1">Combined Expiries (2-3 Max):</span>
-          {selectedExpiries.map((exp) => (
-            <span
-              key={exp}
-              className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-300 flex items-center gap-1"
-            >
-              {exp}
-              {selectedExpiries.length > 1 && (
-                <button
-                  onClick={() => toggleExpiry(exp)}
-                  className="hover:text-rose-400 ml-0.5"
-                >
-                  ×
-                </button>
-              )}
-            </span>
-          ))}
-          <span className="text-slate-400 font-semibold ml-1">
-            (Unified Open Interest & Volume flow for near-term settlement)
-          </span>
+      {/* 2. MARKET DIRECTIONAL PROBABILITY BANNER */}
+      {marketAnalysis && (
+        <div className="mt-4 p-4 bg-gradient-to-r from-slate-950 via-[#0d121c] to-slate-950 border border-cyan-500/40 rounded-xl font-mono shadow-lg">
+          <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+            <div className="flex items-center gap-2">
+              <Compass className="w-4 h-4 text-cyan-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-100">
+                MARKET DIRECTION PROBABILITY & DATA BEHAVIOR ({getDisplayAssetName(asset)})
+              </span>
+              <span className="px-2 py-0.5 text-[10px] font-black rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                {marketAnalysis.primaryDirection}
+              </span>
+            </div>
+          </div>
         </div>
       )}
-      ...
+
+      {/* 3. OPTIONS MATRIX TABLE */}
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-left font-mono text-xs border-collapse">
+          <thead>
+            <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
+              <th className="py-2.5 px-3">Call OI Depth</th>
+              <th className="py-2.5 px-3">Call OI ($M)</th>
+              <th className="py-2.5 px-3">Call Vol</th>
+              <th className="py-2.5 px-3">Δ {timeframe} (OI / Vol)</th>
+              <th className="py-2.5 px-3 text-center">Strike ($)</th>
+              <th className="py-2.5 px-3">Δ {timeframe} (OI / Vol)</th>
+              <th className="py-2.5 px-3">Put Vol</th>
+              <th className="py-2.5 px-3">Put OI ($M)</th>
+              <th className="py-2.5 px-3">Put OI Depth</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/50">
+            {filteredMatrix.length > 0 ? (
+              filteredMatrix.map((row) => {
+                const isSpotRow = spotPrice && Math.abs(row.strike - spotPrice) < (asset === 'XAUT' ? 12 : 500);
+                return (
+                  <React.Fragment key={row.strike}>
+                    {isSpotRow && (
+                      <tr>
+                        <td colSpan={9} className="py-2 text-center bg-cyan-950/30 border-y border-cyan-500/40 text-cyan-300 text-[11px] font-bold">
+                          --- SPOT PRICE LEVEL: ${formatNumber(spotPrice, 2)} ---
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="hover:bg-slate-900/40 transition-colors">
+                      {/* Call Depth */}
+                      <td className="py-2.5 px-3">
+                        <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-emerald-500 h-full" style={{ width: `${row.callBarPct}%` }} />
+                        </div>
+                      </td>
+                      {/* Call OI ($M) */}
+                      <td className="py-2.5 px-3 font-bold text-white">
+                        {row.callOi > 0 ? `${row.callOi.toFixed(2)}M` : '0.00'}
+                      </td>
+                      {/* Call Volume */}
+                      <td className="py-2.5 px-3 text-slate-300">
+                        {formatNumber(row.callVolume, 1)}
+                      </td>
+                      {/* Call OI Change */}
+                      <td className="py-2.5 px-3">
+                        <span className={`font-semibold ${(row.call?.oiChange || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {formatPercentChange(row.call?.oiChangePct)}
+                        </span>
+                      </td>
+
+                      {/* Strike */}
+                      <td className="py-2.5 px-3 text-center font-extrabold text-cyan-300 bg-slate-900/60">
+                        ${formatNumber(row.strike, 1)}
+                      </td>
+
+                      {/* Put OI Change */}
+                      <td className="py-2.5 px-3">
+                        <span className={`font-semibold ${(row.put?.oiChange || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {formatPercentChange(row.put?.oiChangePct)}
+                        </span>
+                      </td>
+                      {/* Put Volume */}
+                      <td className="py-2.5 px-3 text-slate-300">
+                        {formatNumber(row.putVolume, 1)}
+                      </td>
+                      {/* Put OI ($M) */}
+                      <td className="py-2.5 px-3 font-bold text-white">
+                        {row.putOi > 0 ? `${row.putOi.toFixed(2)}M` : '0.00'}
+                      </td>
+                      {/* Put Depth */}
+                      <td className="py-2.5 px-3">
+                        <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-rose-500 h-full" style={{ width: `${row.putBarPct}%` }} />
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={9} className="text-center py-6 text-slate-500">
+                  {loading ? 'Loading options matrix structure...' : 'No option strikes available.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
