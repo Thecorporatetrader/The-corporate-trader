@@ -272,17 +272,17 @@ export async function GET(request: NextRequest) {
       const markPrice = parseFloat(t.mark_price ?? t.close ?? t.ltp ?? 0);
       const contractValue = parseFloat(item.contract_value) || (asset === 'XAUT' ? 0.01 : 1);
 
-      // Force conversion into Millions ($M) matching Delta Exchange
+      // Accurate Notional in USD calculation matching Delta Exchange analytics ($M scale)
       const notionalRaw = parseFloat(t.oi_value_usd ?? t.notional_value ?? 0) || (contractCount * strike * contractValue);
-      const oiInMillions = notionalRaw > 0 ? Number((notionalRaw / 1_000_000).toFixed(2)) : Number(((contractCount * markPrice) / 1_000_000).toFixed(2));
+      const oiInMillions = notionalRaw > 0 ? Number((notionalRaw / 1_000_000).toFixed(2)) : Number(((contractCount * markPrice * contractValue) / 1_000_000).toFixed(2));
 
-      // Accurate OI Change (USD or Percentage allowing negative unwinding values)
+      // Correctly capture absolute or percentage OI change in USD Millions (allowing negative values for exiting contracts)
       const oiChangeUsd = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? t.change_usd_24h ?? 0);
       const oiChange = oiChangeUsd !== 0 ? Number((oiChangeUsd / 1_000_000).toFixed(2)) : parseFloat(t.oi_change_24h_percent ?? 0);
       const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.oi_change_percentage ?? 0);
       
       const volume = parseFloat(t.volume ?? t.volume_24h ?? t.turnover ?? 0);
-      const volumeInMillions = volume > 1000 ? Number((volume / 1_000_000).toFixed(2)) : volume;
+      const volumeInMillions = volume > 1000 ? Number((volume / 1_000_000).toFixed(2)) : Number((volume / 1000).toFixed(2));
       const volumeChangePct = parseFloat(t.turnover_change_24h ?? 0);
 
       const payload: OptionMetrics = {
