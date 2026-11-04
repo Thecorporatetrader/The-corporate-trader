@@ -270,14 +270,14 @@ export async function GET(request: NextRequest) {
       const contractCount = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
       
       const markPrice = parseFloat(t.mark_price ?? t.close ?? t.ltp ?? 0);
-      const contractValue = parseFloat(item.contract_value) || 1;
+      const contractValue = parseFloat(item.contract_value) || (asset === 'XAUT' ? 0.01 : 1);
 
-      // Calculate Notional Value in Millions to match Delta Exchange style
-      const notionalRaw = parseFloat(t.oi_value_usd ?? t.notional_value ?? 0) || (contractCount * markPrice * contractValue);
-      const oiInMillions = Number((notionalRaw / 1_000_000).toFixed(2));
+      // Force conversion into Millions ($M) matching Delta Exchange's chart metrics
+      const notionalRaw = parseFloat(t.oi_value_usd ?? t.notional_value ?? 0) || (contractCount * strike * contractValue);
+      const oiInMillions = notionalRaw > 0 ? Number((notionalRaw / 1_000_000).toFixed(2)) : Number(((contractCount * markPrice) / 1_000_000).toFixed(2));
 
-      // Capture Delta Exchange's directional/percentage OI changes (allowing negative values for exiting contracts)
-      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? t.change_usd_24h ?? 0);
+      // Accurate OI Change (USD or Percentage allowing negative unwinding values)
+      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? t.change_usd_24h ?? 0) / 1_000_000;
       const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.oi_change_percentage ?? t.price_change_percent_24h ?? 0);
       
       const volume = parseFloat(t.volume ?? t.volume_24h ?? t.turnover ?? 0);
@@ -286,11 +286,11 @@ export async function GET(request: NextRequest) {
       const payload: OptionMetrics = {
         symbol: item.symbol,
         contractType: isCall ? 'call' : 'put',
-        oi: oiInMillions > 0 ? oiInMillions : Number((contractCount / 1000).toFixed(1)),
+        oi: oiInMillions > 0 ? oiInMillions : Number((contractCount / 1000).toFixed(2)),
         oiChange,
         oiChangePct,
         markPrice,
-        volume,
+        volume: volume > 1000 ? Number((volume / 1_000_000).toFixed(2)) : volume,
         volumeChangePct,
         notional: notionalRaw,
       };
@@ -300,7 +300,7 @@ export async function GET(request: NextRequest) {
           strikesMap[strike].call = payload;
         } else {
           strikesMap[strike].call.oi += oiInMillions;
-          strikesMap[strike].call.volume += volume;
+          strikesMap[strike].call.volume += payload.volume;
           strikesMap[strike].call.notional += notionalRaw;
         }
       } else {
@@ -308,7 +308,7 @@ export async function GET(request: NextRequest) {
           strikesMap[strike].put = payload;
         } else {
           strikesMap[strike].put.oi += oiInMillions;
-          strikesMap[strike].put.volume += volume;
+          strikesMap[strike].put.volume += payload.volume;
           strikesMap[strike].put.notional += notionalRaw;
         }
       }
