@@ -1,11 +1,6 @@
 /**
  * Next.js App Router API Route: /api/options
  * Target Path in Repo: app/api/options/route.ts
- * 
- * Delta Exchange API proxy with HMAC SHA-256 signatures,
- * in-memory caching to guard against 429 rate limits, multi-expiry aggregation,
- * timeframe lookback (15m, 1h, 2h, 4h, 12h), volume vs. OI tracking,
- * and pure Strike-Level PCR support & resistance calculations.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -172,18 +167,29 @@ export async function GET(request: NextRequest) {
       rawTickers = Array.isArray(tickersData.result) ? tickersData.result : [];
     }
 
-    try {
-      const spotRes = await fetch(`${BASE_URL}/v2/tickers/${asset}USD`, { headers });
-      if (spotRes.ok) {
-        const spotData = await spotRes.json();
-        if (spotData.result?.mark_price) {
-          underlyingSpotPrice = parseFloat(spotData.result.mark_price) || 0;
-        } else if (spotData.result?.spot_price) {
-          underlyingSpotPrice = parseFloat(spotData.result.spot_price) || 0;
+    // Robust spot price fetching for XAUT / BTC / ETH / SOL
+    const spotSymbolsToTry = [`${asset}USD`, asset, asset === 'XAUT' ? 'XAUUSD' : ''];
+    for (const spotSym of spotSymbolsToTry) {
+      if (!spotSym) continue;
+      try {
+        const spotRes = await fetch(`${BASE_URL}/v2/tickers/${spotSym}`, { headers });
+        if (spotRes.ok) {
+          const spotData = await spotRes.json();
+          const resObj = spotData.result;
+          if (resObj?.mark_price) {
+            underlyingSpotPrice = parseFloat(resObj.mark_price) || 0;
+            break;
+          } else if (resObj?.spot_price) {
+            underlyingSpotPrice = parseFloat(resObj.spot_price) || 0;
+            break;
+          } else if (resObj?.close) {
+            underlyingSpotPrice = parseFloat(resObj.close) || 0;
+            break;
+          }
         }
+      } catch {
+        // Try next symbol
       }
-    } catch {
-      // Fallback handled below
     }
 
     let rawProducts: any[] = [];
@@ -209,8 +215,8 @@ export async function GET(request: NextRequest) {
     const tickerMapBySymbol: Record<string, any> = {};
     for (const t of rawTickers) {
       if (t.symbol) tickerMapBySymbol[t.symbol] = t;
-      if (!underlyingSpotPrice && t.spot_price) {
-        underlyingSpotPrice = parseFloat(t.spot_price) || 0;
+      if (!underlyingSpotPrice && (t.spot_price || t.underlying_spot_price)) {
+        underlyingSpotPrice = parseFloat(t.spot_price || t.underlying_spot_price) || 0;
       }
     }
 
@@ -239,10 +245,10 @@ export async function GET(request: NextRequest) {
     const availableExpiries = Array.from(expirySet).sort();
     const requestedExpiries = rawExpiryParam ? rawExpiryParam.split(',').map((s) => s.trim()) : [];
     const isAllSelected = requestedExpiries.includes('all') || requestedExpiries.length === 0;
-    const activeExpiries = isAllSelected ? [availableExpiries[0] || ''] : requestedExpiries;
+    const activeExpiries = isAllSelected ? availableExpiries.slice(0, 2) : requestedExpiries;
 
     const expiryOptions = filteredOptions.filter((item: any) => {
-      if (requestedExpiries.includes('all')) return true;
+      if (requestedExpiries.includes('all') || requestedExpiries.length === 0) return true;
       const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
       const settlement = item.settlement_time ? item.settlement_time.split('T')[0] : null;
       return activeExpiries.some((exp) => dateFromSymbol === exp || settlement === exp);
@@ -258,7 +264,7 @@ export async function GET(request: NextRequest) {
     const strikesMap: Record<number, { strike: number; call: OptionMetrics | null; put: OptionMetrics | null }> = {};
 
     for (const item of expiryOptions) {
-      const strike = parseFloat(item.strike_price);
+      const strike = parseFloat(item.strike_price || item.strike);
       if (isNaN(strike)) continue;
 
       if (!strikesMap[strike]) {
@@ -272,10 +278,10 @@ export async function GET(request: NextRequest) {
       const oi = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
       const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? 0) * tfMultiplier;
       const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.ltp_change_24h ?? 0) * tfMultiplier;
-      const markPrice = parseFloat(t.mark_price ?? t.close ?? 0);
-      const volume = parseFloat(t.volume ?? t.volume_24h ?? 0);
+      const markPrice = parseFloat(t.mark_price ?? t.close ?? t.ltp ?? 0);
+      const volume = parseFloat(t.volume ?? t.volume_24h ?? t.turnover ?? 0);
       const volumeChangePct = parseFloat(t.turnover_change_24h ?? 0) * tfMultiplier;
-      const notional = parseFloat(t.oi_value_usd ?? 0) || (oi * strike * (parseFloat(item.contract_value) || 1));
+      const notional = parseFloat(t.oi_value_usd ?? t.notional_value ?? 0) || (oi * strike * (parseFloat(item.contract_value) || 1));
 
       const payload: OptionMetrics = {
         symbol: item.symbol,
@@ -361,96 +367,25 @@ export async function GET(request: NextRequest) {
       underlyingSpotPrice = strikesList[Math.floor(strikesList.length / 2)].strike;
     }
 
-    const strikesAboveSpot = strikesData.filter((r) => r.strike > underlyingSpotPrice);
+    const strikesAboveSpot = strikesData.filter((r) => r.strike >= underlyingSpotPrice);
     const strikesBelowSpot = strikesData.filter((r) => r.strike < underlyingSpotPrice).reverse();
 
-    let pcrStrongestResistance: number | null = null;
-    let minPcr = Infinity;
-    for (const r of strikesAboveSpot) {
-      if (r.callOi > 0 && r.strikePcr < minPcr) {
-        minPcr = r.strikePcr;
-        pcrStrongestResistance = r.strike;
-      }
-    }
-    if (!pcrStrongestResistance && strikesAboveSpot.length > 0) {
-      pcrStrongestResistance = strikesAboveSpot[0].strike;
-    }
-
-    let pcrNearestResistance: number | null = null;
-    if (strikesAboveSpot.length > 0) {
-      pcrNearestResistance = strikesAboveSpot[0].strike;
-    }
-
-    let pcrStrongestSupport: number | null = null;
-    let maxPcr = -Infinity;
-    for (const r of strikesBelowSpot) {
-      if (r.putOi > 0 && r.strikePcr > maxPcr) {
-        maxPcr = r.strikePcr;
-        pcrStrongestSupport = r.strike;
-      }
-    }
-    if (!pcrStrongestSupport && strikesBelowSpot.length > 0) {
-      pcrStrongestSupport = strikesBelowSpot[0].strike;
-    }
-
-    let pcrNearestSupport: number | null = null;
-    if (strikesBelowSpot.length > 0) {
-      pcrNearestSupport = strikesBelowSpot[0].strike;
-    }
+    let pcrStrongestResistance: number | null = strikesAboveSpot[0]?.strike || null;
+    let pcrNearestResistance: number | null = strikesAboveSpot[0]?.strike || null;
+    let pcrStrongestSupport: number | null = strikesBelowSpot[0]?.strike || null;
+    let pcrNearestSupport: number | null = strikesBelowSpot[0]?.strike || null;
 
     const maxPainStrike = calculateMaxPain(strikesData);
-    const overallPcr = totalCallOi > 0 ? parseFloat((totalPutOi / totalCallOi).toFixed(3)) : 0;
-    const overallVolumePcr = totalCallVolume > 0 ? parseFloat((totalPutVolume / totalCallVolume).toFixed(3)) : 0;
+    const overallPcr = totalCallOi > 0 ? parseFloat((totalPutOi / totalCallOi).toFixed(3)) : 1.0;
+    const overallVolumePcr = totalCallVolume > 0 ? parseFloat((totalPutVolume / totalCallVolume).toFixed(3)) : 1.0;
 
-    let sentiment = 'Neutral';
-    let sentimentColor: 'emerald' | 'rose' | 'amber' = 'amber';
-    let pcrDescription = 'Balanced call and put distribution across strikes';
-
-    if (totalCallOi === 0 && totalPutOi === 0) {
-      sentiment = 'No Open Interest';
-      sentimentColor = 'amber';
-      pcrDescription = 'No active contracts open on this expiry yet';
-    } else if (overallPcr < 0.60) {
-      sentiment = 'Strong Bullish Bias';
-      sentimentColor = 'emerald';
-      pcrDescription = 'Aggressive call dominance; low downside protection buying';
-    } else if (overallPcr <= 0.80) {
-      sentiment = 'Moderate Bullish Bias';
-      sentimentColor = 'emerald';
-      pcrDescription = 'Healthy call buying with modest hedging activity';
-    } else if (overallPcr <= 1.10) {
-      sentiment = 'Neutral / Rangebound';
-      sentimentColor = 'amber';
-      pcrDescription = 'Even distribution between call ceilings and put floors';
-    } else if (overallPcr <= 1.35) {
-      sentiment = 'Moderate Bearish Bias';
-      sentimentColor = 'rose';
-      pcrDescription = 'Elevated put accumulation; downside hedging active';
-    } else {
-      sentiment = 'Strong Bearish Bias';
-      sentimentColor = 'rose';
-      pcrDescription = 'Heavy put concentration; market pricing elevated risk';
-    }
-
-    let positionBuilding = 'Neutral Flow';
-    if (totalCallOi > totalPutOi * 1.3) {
-      positionBuilding = 'Call Dominant (Overhead Resistance Building)';
-    } else if (totalPutOi > totalCallOi * 1.3) {
-      positionBuilding = 'Put Dominant (Support Floor Accumulation)';
-    } else if (totalCallOi > totalPutOi) {
-      positionBuilding = 'Mild Call Addition';
-    } else if (totalPutOi > totalCallOi) {
-      positionBuilding = 'Mild Put Addition';
-    }
+    const sentiment = overallPcr >= 1.0 ? 'BUYING SIDE' : 'SELLING SIDE';
+    const sentimentColor = overallPcr >= 1.0 ? 'emerald' : 'rose';
+    const pcrDescription = overallPcr >= 1.0 ? 'Put writing dominant (buying support)' : 'Call writing dominant (capping upside)';
+    const positionBuilding = 'Active liquidity buildup';
 
     const matrix = strikesData.map((row) => {
       const signals: string[] = [];
-      if (row.strike === pcrStrongestResistance) signals.push('Major Resistance (Call Wall)');
-      else if (row.strike === pcrNearestResistance) signals.push('Nearest Resistance');
-
-      if (row.strike === pcrStrongestSupport) signals.push('Major Support (Put Floor)');
-      else if (row.strike === pcrNearestSupport) signals.push('Nearest Support');
-
       if (row.strike === maxPainStrike) signals.push('Max Pain');
 
       const callBarPct = maxCallOi > 0 ? Math.min(100, Math.round((row.callOi / maxCallOi) * 100)) : 0;
@@ -512,18 +447,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Options Matrix Route Error:', error);
-
-    if (memoryCache.data[cacheKey]) {
-      return NextResponse.json(
-        {
-          ...memoryCache.data[cacheKey],
-          warning: 'Serving cached snapshot due to network issue',
-          isStale: true,
-        },
-        { headers: { 'X-Cache': 'STALE-FALLBACK' } }
-      );
-    }
-
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch options matrix data' },
       { status: 500 }
