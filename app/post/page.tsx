@@ -180,7 +180,10 @@ function parseCSV(csv: string, series: string): Point[] {
     .split(',')
     .map((s) => s.trim().replace(/^"|"$/g, ''));
 
-  if (!['observation_date', 'DATE'].includes(header[0]) || header[1] !== series) {
+  if (
+    !['observation_date', 'DATE'].includes(header[0]) ||
+    header[1] !== series
+  ) {
     return [];
   }
 
@@ -212,12 +215,17 @@ function parseCSV(csv: string, series: string): Point[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function calculate(points: Point[], mode: Metric['mode']): Point[] {
+function calculate(
+  points: Point[],
+  mode: Metric['mode'],
+): Point[] {
   if (mode === 'level') {
     return points;
   }
 
-  const lookup = new Map(points.map((p) => [p.date.slice(0, 7), p.value]));
+  const lookup = new Map(
+    points.map((p) => [p.date.slice(0, 7), p.value]),
+  );
 
   return points.flatMap((point) => {
     const year = Number(point.date.slice(0, 4));
@@ -228,7 +236,9 @@ function calculate(points: Point[], mode: Metric['mode']): Point[] {
         ? String(year - 1) + point.date.slice(4, 7)
         : month === 1
           ? String(year - 1) + '-12'
-          : String(year) + '-' + String(month - 1).padStart(2, '0');
+          : String(year) +
+            '-' +
+            String(month - 1).padStart(2, '0');
 
     const value = lookup.get(prior);
 
@@ -249,17 +259,23 @@ function calculate(points: Point[], mode: Metric['mode']): Point[] {
 }
 
 async function readMetric(metric: Metric): Promise<Reading> {
-  const start = String(new Date().getUTCFullYear() - 4) + '-01-01';
+  const start =
+    String(new Date().getUTCFullYear() - 4) + '-01-01';
 
   const url =
     'https://fred.stlouisfed.org/graph/fredgraph.csv?' +
-    new URLSearchParams({ id: metric.id, cosd: start }).toString();
+    new URLSearchParams({
+      id: metric.id,
+      cosd: start,
+    }).toString();
 
   try {
     const response = await fetch(url, {
       cache: 'no-store',
       signal: AbortSignal.timeout(8000),
-      headers: { Accept: 'text/csv,text/plain;q=0.9' },
+      headers: {
+        Accept: 'text/csv,text/plain;q=0.9',
+      },
     });
 
     if (!response.ok) {
@@ -272,7 +288,10 @@ async function readMetric(metric: Metric): Promise<Reading> {
       throw new Error('Unexpected response size');
     }
 
-    const points = calculate(parseCSV(csv, metric.id), metric.mode).slice(-24);
+    const points = calculate(
+      parseCSV(csv, metric.id),
+      metric.mode,
+    ).slice(-24);
 
     return {
       metric,
@@ -288,15 +307,25 @@ async function readMetric(metric: Metric): Promise<Reading> {
   }
 }
 
-function period(date: string, frequency: Metric['frequency']) {
+function period(
+  date: string,
+  frequency: Metric['frequency'],
+) {
   if (frequency === 'Quarterly') {
-    return 'Q' + Math.ceil(Number(date.slice(5, 7)) / 3) + ' ' + date.slice(0, 4);
+    return (
+      'Q' +
+      Math.ceil(Number(date.slice(5, 7)) / 3) +
+      ' ' +
+      date.slice(0, 4)
+    );
   }
 
   return new Intl.DateTimeFormat('en-GB', {
     month: 'short',
     year: 'numeric',
-    ...(frequency === 'Weekly' ? { day: 'numeric' as const } : {}),
+    ...(frequency === 'Weekly'
+      ? { day: 'numeric' as const }
+      : {}),
     timeZone: 'UTC',
   }).format(new Date(date + 'T00:00:00Z'));
 }
@@ -314,14 +343,18 @@ function isOld(reading: Reading) {
     return false;
   }
 
-  const days = (Date.now() - Date.parse(latest.date + 'T00:00:00Z')) / 86400000;
+  const days =
+    (Date.now() - Date.parse(latest.date + 'T00:00:00Z')) /
+    86400000;
 
-  return days >
+  return (
+    days >
     (reading.metric.frequency === 'Quarterly'
       ? 220
       : reading.metric.frequency === 'Weekly'
         ? 28
-        : 100);
+        : 100)
+  );
 }
 
 function Sparkline({ points }: { points: Point[] }) {
@@ -338,7 +371,11 @@ function Sparkline({ points }: { points: Point[] }) {
       (value, i) =>
         (i * 300 / (values.length - 1)).toFixed(1) +
         ',' +
-        (max === min ? 40 : 72 - ((value - min) / (max - min)) * 62).toFixed(1),
+        (
+          max === min
+            ? 40
+            : 72 - ((value - min) / (max - min)) * 62
+        ).toFixed(1),
     )
     .join(' ');
 
@@ -349,7 +386,12 @@ function Sparkline({ points }: { points: Point[] }) {
       preserveAspectRatio="none"
       aria-hidden="true"
     >
-      <path d="M0 78 H300" stroke="#223b48" fill="none" />
+      <path
+        d="M0 78 H300"
+        stroke="#223b48"
+        fill="none"
+      />
+
       <polyline
         points={coordinates}
         fill="none"
@@ -363,14 +405,20 @@ function Sparkline({ points }: { points: Point[] }) {
 
 function Indicator({ reading }: { reading: Reading }) {
   const { metric, points } = reading;
+
   const latest = points[points.length - 1];
   const previous = points[points.length - 2];
-  const change = latest && previous ? latest.value - previous.value : null;
+
+  const change =
+    latest && previous
+      ? latest.value - previous.value
+      : null;
 
   return (
     <article className="mw-card" id={'indicator-' + metric.id}>
       <div className="mw-card-top">
         <span>{metric.frequency}</span>
+
         <span>
           {metric.mode === 'yoy'
             ? 'Annual change'
@@ -389,7 +437,8 @@ function Indicator({ reading }: { reading: Reading }) {
 
       <p className="mw-meta">
         {latest
-          ? 'Observation: ' + period(latest.date, metric.frequency)
+          ? 'Observation: ' +
+            period(latest.date, metric.frequency)
           : 'The source did not return a valid reading.'}
       </p>
 
@@ -404,7 +453,11 @@ function Indicator({ reading }: { reading: Reading }) {
       <p className="mw-meta">
         {change === null
           ? 'No prior-period comparison available.'
-          : (change > 0 ? '↑ ' : change < 0 ? '↓ ' : '→ ') +
+          : (change > 0
+              ? '↑ '
+              : change < 0
+                ? '↓ '
+                : '→ ') +
             number(Math.abs(change), metric) +
             (metric.unit.includes('%')
               ? ' percentage points'
@@ -422,8 +475,9 @@ function Indicator({ reading }: { reading: Reading }) {
         </p>
 
         <p className="mw-meta">
-          Source: {metric.source}, via FRED. Previous readings reflect the
-          current revised series, not necessarily the first release.
+          Source: {metric.source}, via FRED. Previous readings
+          reflect the current revised series, not necessarily the
+          first release.
         </p>
 
         {points.length > 0 && (
@@ -434,20 +488,27 @@ function Indicator({ reading }: { reading: Reading }) {
             aria-label={metric.name + ' history'}
           >
             <table>
-              <caption>Latest 12 observations · {metric.unit}</caption>
+              <caption>
+                Latest 12 observations · {metric.unit}
+              </caption>
+
               <thead>
                 <tr>
                   <th scope="col">Period</th>
                   <th scope="col">Value</th>
                 </tr>
               </thead>
+
               <tbody>
                 {points
                   .slice(-12)
                   .reverse()
                   .map((p) => (
                     <tr key={p.date}>
-                      <th scope="row">{period(p.date, metric.frequency)}</th>
+                      <th scope="row">
+                        {period(p.date, metric.frequency)}
+                      </th>
+
                       <td>{number(p.value, metric)}</td>
                     </tr>
                   ))}
@@ -458,7 +519,9 @@ function Indicator({ reading }: { reading: Reading }) {
 
         <a
           className="mw-source"
-          href={'https://fred.stlouisfed.org/series/' + metric.id}
+          href={
+            'https://fred.stlouisfed.org/series/' + metric.id
+          }
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -496,7 +559,11 @@ a{color:#65e4eb}
 
 export default async function MarketWatchPage() {
   const readings = await Promise.all(metrics.map(readMetric));
-  const available = readings.filter((r) => r.points.length > 0).length;
+
+  const available = readings.filter(
+    (r) => r.points.length > 0,
+  ).length;
+
   const checked = readings.find((r) => r.checked)?.checked;
 
   const overview = [
@@ -504,7 +571,9 @@ export default async function MarketWatchPage() {
     'CPIAUCSL',
     'UNRATE',
     'PAYEMS',
-  ].map((id) => readings.find((r) => r.metric.id === id)!);
+  ].map(
+    (id) => readings.find((r) => r.metric.id === id)!,
+  );
 
   return (
     <>
@@ -525,9 +594,9 @@ export default async function MarketWatchPage() {
               </h1>
 
               <p className="mw-lead">
-                Understand the economy behind the chart. Explore growth,
-                inflation, employment and derivatives market structure before
-                you form a market view.
+                Understand the economy behind the chart. Explore
+                growth, inflation, employment and derivatives market
+                structure before you form a market view.
               </p>
             </div>
 
@@ -552,7 +621,10 @@ export default async function MarketWatchPage() {
             </div>
           </header>
 
-          <nav className="mw-tabs" aria-label="Market Watch sections">
+          <nav
+            className="mw-tabs"
+            aria-label="Market Watch sections"
+          >
             <a href="#macro">Overview</a>
 
             {sections.map(([id, , title]) => (
@@ -607,17 +679,17 @@ export default async function MarketWatchPage() {
             </div>
 
             <div className="mw-notice">
-              Economic releases are periodic, not a live price feed. Each
-              figure has its own observation date. Refresh this page to request
-              updated data. Older or missing readings are flagged; no
-              simulated values are used.
+              Economic releases are periodic, not a live price feed.
+              Each figure has its own observation date. Refresh this
+              page to request updated data. Older or missing readings
+              are flagged; no simulated values are used.
             </div>
 
             {available < metrics.length && (
               <div className="mw-warning" role="status">
-                Some sources could not be reached. Their explanations and
-                source links remain available. Try refreshing later;
-                unavailable does not mean zero.
+                Some sources could not be reached. Their explanations
+                and source links remain available. Try refreshing
+                later; unavailable does not mean zero.
               </div>
             )}
           </section>
@@ -629,6 +701,7 @@ export default async function MarketWatchPage() {
                 <p className="mw-kicker">
                   01 / DERIVATIVES & MARKET STRUCTURE
                 </p>
+
                 <h2>Options Market Matrix</h2>
               </div>
 
@@ -638,10 +711,14 @@ export default async function MarketWatchPage() {
             </div>
 
             <p className="mw-intro">
-              Analyse exchange-reported options Open Interest and turnover,
-              strike-wise Call and Put distribution, and Put-Call Ratio (PCR).
-              Select an underlying asset and expiry to examine the available
-              options data.
+              Analyse Delta Exchange options positioning using
+              USD-denominated Open Interest and turnover. Compare
+              Call and Put activity across strikes, monitor Open
+              Interest PCR and Volume PCR, identify concentration
+              near the underlying spot price, and compare
+              single-expiry or multi-expiry positioning. All values
+              are sourced from exchange ticker data; historical
+              timeframe changes are not estimated.
             </p>
 
             <div className="mb-6">
@@ -663,8 +740,9 @@ export default async function MarketWatchPage() {
             </div>
 
             <p className="mw-intro">
-              Compare the latest available reading with its previous period.
-              Select an indicator for its definition and history.
+              Compare the latest available reading with its previous
+              period. Select an indicator for its definition and
+              history.
             </p>
 
             <div
@@ -675,7 +753,8 @@ export default async function MarketWatchPage() {
             >
               <table>
                 <caption>
-                  Latest observations, not a release-time forecast comparison
+                  Latest observations, not a release-time forecast
+                  comparison
                 </caption>
 
                 <thead>
@@ -699,15 +778,20 @@ export default async function MarketWatchPage() {
                           <a href={'#indicator-' + metric.id}>
                             {metric.name} ↗
                           </a>
+
                           <small>{metric.unit}</small>
                         </th>
 
                         <td>
-                          {last ? number(last.value, metric) : 'Unavailable'}
+                          {last
+                            ? number(last.value, metric)
+                            : 'Unavailable'}
                         </td>
 
                         <td>
-                          {prior ? number(prior.value, metric) : '—'}
+                          {prior
+                            ? number(prior.value, metric)
+                            : '—'}
                         </td>
 
                         <td>
@@ -725,17 +809,21 @@ export default async function MarketWatchPage() {
             </div>
 
             <p className="mw-meta">
-              Consensus forecasts and surprise scores are not supplied by
-              these series. The calendar may show forecasts where its
-              provider has coverage. Directional price reactions are never
-              guaranteed.
+              Consensus forecasts and surprise scores are not
+              supplied by these series. The calendar may show
+              forecasts where its provider has coverage. Directional
+              price reactions are never guaranteed.
             </p>
           </section>
 
           {/* Growth, Inflation and Labour */}
           {(['growth', 'inflation', 'labour'] as const).map(
             (group, i) => (
-              <section id={group} className="mw-section" key={group}>
+              <section
+                id={group}
+                className="mw-section"
+                key={group}
+              >
                 <div className="mw-heading">
                   <div>
                     <p className="mw-kicker">
@@ -787,23 +875,28 @@ export default async function MarketWatchPage() {
                 <h2>Economic Calendar</h2>
               </div>
 
-              <span className="mw-badge">THIRD-PARTY WIDGET</span>
+              <span className="mw-badge">
+                THIRD-PARTY WIDGET
+              </span>
             </div>
 
             <p className="mw-intro">
               Upcoming US releases, importance and available actual /
-              forecast / previous readings. Check the timezone displayed
-              inside the calendar before planning around an event.
+              forecast / previous readings. Check the timezone
+              displayed inside the calendar before planning around
+              an event.
             </p>
 
             <details className="mw-calendar mw-panel">
               <summary>
-                Open economic calendar <span>Loads TradingView content</span>
+                Open economic calendar{' '}
+                <span>Loads TradingView content</span>
               </summary>
 
               <p className="mw-meta">
-                This third-party embed contacts TradingView and follows its
-                privacy terms. Provider branding and source links are retained.
+                This third-party embed contacts TradingView and
+                follows its privacy terms. Provider branding and
+                source links are retained.
               </p>
 
               <iframe
@@ -825,7 +918,8 @@ export default async function MarketWatchPage() {
               >
                 Open the provider calendar ↗
               </a>
-              . Verify important events against the official release schedules:
+              . Verify important events against the official release
+              schedules:
             </p>
 
             <div className="mw-links">
@@ -860,36 +954,40 @@ export default async function MarketWatchPage() {
             <h2>Read the data. Respect the uncertainty.</h2>
 
             <p>
-              This dashboard is educational context, not investment advice,
-              a signal service or a promise of market direction. Higher or
-              lower readings can affect USD, equities, gold and bonds
-              differently depending on expectations, revisions and policy.
+              This dashboard is educational context, not investment
+              advice, a signal service or a promise of market
+              direction. Higher or lower readings can affect USD,
+              equities, gold and bonds differently depending on
+              expectations, revisions and policy.
             </p>
 
             <details className="mw-detail">
               <summary>Sources & calculation methods</summary>
 
               <p>
-                Observations are retrieved server-side from public FRED CSV
-                exports. Original agencies are credited on every indicator.
-                This website is not endorsed by those agencies or the Federal
-                Reserve Bank of St. Louis.
+                Observations are retrieved server-side from public
+                FRED CSV exports. Original agencies are credited on
+                every indicator. This website is not endorsed by
+                those agencies or the Federal Reserve Bank of
+                St. Louis.
               </p>
 
               <p>
-                Annual inflation / production change = (current index ÷ index
-                for the same month one year earlier − 1) × 100. Payroll
-                change = current month's employment minus the preceding
-                month's employment, in thousands. GDP is the published
-                quarter-on-quarter annualised growth series. Differences
-                between percentage readings are percentage points.
+                Annual inflation / production change = (current
+                index ÷ index for the same month one year earlier
+                − 1) × 100. Payroll change = current month's
+                employment minus the preceding month's employment,
+                in thousands. GDP is the published quarter-on-quarter
+                annualised growth series. Differences between
+                percentage readings are percentage points.
               </p>
 
               <p>
-                History uses the latest revised data, not vintage observations.
-                Observation periods are not publication dates. A source may
-                lag its originating agency. Charts show up to 12 observations,
-                each with its own vertical scale; they are not directly
+                History uses the latest revised data, not vintage
+                observations. Observation periods are not
+                publication dates. A source may lag its originating
+                agency. Charts show up to 12 observations, each
+                with its own vertical scale; they are not directly
                 comparable. All figures can be revised.
               </p>
 
