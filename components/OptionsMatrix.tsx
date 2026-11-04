@@ -216,7 +216,8 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
 
   useEffect(() => {
     if (data?.availableExpiries && data.availableExpiries.length > 0 && selectedExpiries.length === 0) {
-      setSelectedExpiries(data.availableExpiries.slice(0, 2));
+      // Delta's analytics page shows a single (nearest) expiry by default
+      setSelectedExpiries(data.availableExpiries.slice(0, 1));
     }
   }, [data?.availableExpiries, selectedExpiries.length]);
 
@@ -261,10 +262,9 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         setData(json);
         setLastRefreshed(new Date());
       } catch (err: any) {
-        console.warn('Backend unavailable, using simulated live matrix feed:', err.message);
-        const fallback = getFallbackOptionsData(asset, timeframe);
-        setData(fallback);
-        setLastRefreshed(new Date());
+        // Never show simulated numbers as if they were live Delta data.
+        console.warn('Options feed error:', err.message);
+        setError(err.message || 'Failed to load options data');
       } finally {
         if (!isBackground) setLoading(false);
         setCountdown(POLLING_INTERVAL_SEC);
@@ -462,6 +462,39 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         </div>
       )}
 
+      {/* Expiry selector + error banner */}
+      <div className="mt-4 flex flex-wrap items-center gap-3 font-mono text-xs">
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setExpiryDropdownOpen((o) => !o)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-200"
+          >
+            <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+            Expiry: {selectedExpiries.length ? selectedExpiries.join(', ') : '—'}
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+          {expiryDropdownOpen && (
+            <div className="absolute z-20 mt-1 w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-1">
+              {(data?.availableExpiries || []).map((exp) => (
+                <button
+                  key={exp}
+                  onClick={() => toggleExpiry(exp)}
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-left hover:bg-slate-800 rounded"
+                >
+                  <span>{exp}</span>
+                  {selectedExpiries.includes(exp) && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {error && (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300">
+            <AlertTriangle className="w-3.5 h-3.5" /> {error}
+          </span>
+        )}
+      </div>
+
       {/* 3. MATRIX TABLE */}
       <div className="mt-4 overflow-x-auto">
         <table className="w-full text-left font-mono text-xs border-collapse">
@@ -470,9 +503,9 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               <th className="py-2.5 px-3">Call OI Depth</th>
               <th className="py-2.5 px-3">Call OI ($M)</th>
               <th className="py-2.5 px-3">Call Vol ($M)</th>
-              <th className="py-2.5 px-3">Δ {timeframe} (OI / Vol)</th>
+              <th className="py-2.5 px-3">Call OI Δ {(data as any)?.oiChangeBasis || timeframe}</th>
               <th className="py-2.5 px-3 text-center">Strike ($)</th>
-              <th className="py-2.5 px-3">Δ {timeframe} (OI / Vol)</th>
+              <th className="py-2.5 px-3">Put OI Δ {(data as any)?.oiChangeBasis || timeframe}</th>
               <th className="py-2.5 px-3">Put Vol ($M)</th>
               <th className="py-2.5 px-3">Put OI ($M)</th>
               <th className="py-2.5 px-3">Put OI Depth</th>
@@ -481,7 +514,12 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
           <tbody className="divide-y divide-slate-800/50">
             {data?.matrix && data.matrix.length > 0 ? (
               data.matrix.map((row) => {
-                const isSpotRow = spotPrice && Math.abs(row.strike - spotPrice) < (asset === 'XAUT' ? 12 : 500);
+                // Draw the spot line once: just before the first strike at/above spot
+                const idx = data.matrix.indexOf(row);
+                const isSpotRow =
+                  spotPrice > 0 &&
+                  row.strike >= spotPrice &&
+                  (idx === 0 ? true : data.matrix[idx - 1].strike < spotPrice);
                 return (
                   <React.Fragment key={row.strike}>
                     {isSpotRow && (
@@ -512,7 +550,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                           {(row.call?.oiChange || 0) >= 0 ? '+' : ''}{row.call?.oiChange?.toFixed(2) || '0.00'}M
                         </span>
                         <div className="text-[10px] text-slate-500">
-                          Vol: {(row.call?.oiChangePct || 0).toFixed(2)}%
+                          OI Δ: {(row.call?.oiChangePct || 0).toFixed(2)}%
                         </div>
                       </td>
 
@@ -527,7 +565,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                           {(row.put?.oiChange || 0) >= 0 ? '+' : ''}{row.put?.oiChange?.toFixed(2) || '0.00'}M
                         </span>
                         <div className="text-[10px] text-slate-500">
-                          Vol: {(row.put?.oiChangePct || 0).toFixed(2)}%
+                          OI Δ: {(row.put?.oiChangePct || 0).toFixed(2)}%
                         </div>
                       </td>
                       {/* Put Volume */}
@@ -558,6 +596,16 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
           </tbody>
         </table>
       </div>
+
+      {/* 4. TOTALS (same figures Delta shows under its chart) */}
+      {summary && (
+        <div className="mt-3 flex flex-wrap justify-end gap-x-5 gap-y-1 font-mono text-xs text-slate-300 border-t border-slate-800 pt-3">
+          <span>Tot. Calls <b className="text-emerald-400">${formatNumber(summary.totalCallOi)}M</b></span>
+          <span>Tot. Puts <b className="text-rose-400">${formatNumber(summary.totalPutOi)}M</b></span>
+          <span>PCR <b className="text-white">{formatNumber(summary.overallPcr)}</b></span>
+          <span>Max Pain <b className="text-cyan-300">{summary.maxPainStrike ?? '—'}</b></span>
+        </div>
+      )}
     </div>
   );
 }
