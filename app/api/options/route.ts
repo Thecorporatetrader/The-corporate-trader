@@ -267,41 +267,49 @@ export async function GET(request: NextRequest) {
       const t = tickerMapBySymbol[item.symbol] || item;
 
       const rawOi = t.oi ?? t.open_interest ?? t.oi_contracts ?? 0;
-      const oi = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
-      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? 0);
-      const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.oi_change_percentage ?? 0);
+      const contractCount = typeof rawOi === 'string' ? parseFloat(rawOi) || 0 : Number(rawOi) || 0;
+      
       const markPrice = parseFloat(t.mark_price ?? t.close ?? t.ltp ?? 0);
+      const contractValue = parseFloat(item.contract_value) || 1;
+
+      // Calculate Notional Value in Millions to match Delta Exchange style
+      const notionalRaw = parseFloat(t.oi_value_usd ?? t.notional_value ?? 0) || (contractCount * markPrice * contractValue);
+      const oiInMillions = Number((notionalRaw / 1_000_000).toFixed(2));
+
+      // Capture Delta Exchange's directional/percentage OI changes (allowing negative values for exiting contracts)
+      const oiChange = parseFloat(t.oi_change_usd_24h ?? t.oi_change_24h ?? t.change_usd_24h ?? 0);
+      const oiChangePct = parseFloat(t.oi_change_24h_percent ?? t.oi_change_percentage ?? t.price_change_percent_24h ?? 0);
+      
       const volume = parseFloat(t.volume ?? t.volume_24h ?? t.turnover ?? 0);
       const volumeChangePct = parseFloat(t.turnover_change_24h ?? 0);
-      const notional = parseFloat(t.oi_value_usd ?? t.notional_value ?? 0) || (oi * markPrice * (parseFloat(item.contract_value) || 1));
 
       const payload: OptionMetrics = {
         symbol: item.symbol,
         contractType: isCall ? 'call' : 'put',
-        oi,
+        oi: oiInMillions > 0 ? oiInMillions : Number((contractCount / 1000).toFixed(1)),
         oiChange,
         oiChangePct,
         markPrice,
         volume,
         volumeChangePct,
-        notional,
+        notional: notionalRaw,
       };
 
       if (isCall) {
         if (!strikesMap[strike].call) {
           strikesMap[strike].call = payload;
         } else {
-          strikesMap[strike].call.oi += oi;
+          strikesMap[strike].call.oi += oiInMillions;
           strikesMap[strike].call.volume += volume;
-          strikesMap[strike].call.notional += notional;
+          strikesMap[strike].call.notional += notionalRaw;
         }
       } else {
         if (!strikesMap[strike].put) {
           strikesMap[strike].put = payload;
         } else {
-          strikesMap[strike].put.oi += oi;
+          strikesMap[strike].put.oi += oiInMillions;
           strikesMap[strike].put.volume += volume;
-          strikesMap[strike].put.notional += notional;
+          strikesMap[strike].put.notional += notionalRaw;
         }
       }
     }
