@@ -1,11 +1,6 @@
 /**
  * Next.js App Router API Route: /api/options
  * Target Path in Repo: app/api/options/route.ts
- * 
- * Delta Exchange API proxy with HMAC SHA-256 signatures,
- * in-memory caching to guard against 429 rate limits, multi-expiry aggregation,
- * timeframe lookback (15m, 1h, 2h, 4h, 12h), volume vs. OI tracking,
- * and pure Strike-Level PCR support & resistance calculations.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -172,18 +167,28 @@ export async function GET(request: NextRequest) {
       rawTickers = Array.isArray(tickersData.result) ? tickersData.result : [];
     }
 
-    try {
-      const spotRes = await fetch(`${BASE_URL}/v2/tickers/${asset}USD`, { headers });
-      if (spotRes.ok) {
-        const spotData = await spotRes.json();
-        if (spotData.result?.mark_price) {
-          underlyingSpotPrice = parseFloat(spotData.result.mark_price) || 0;
-        } else if (spotData.result?.spot_price) {
-          underlyingSpotPrice = parseFloat(spotData.result.spot_price) || 0;
+    const spotSymbolsToTry = [`${asset}USD`, asset, asset === 'XAUT' ? 'XAUUSD' : ''];
+    for (const spotSym of spotSymbolsToTry) {
+      if (!spotSym) continue;
+      try {
+        const spotRes = await fetch(`${BASE_URL}/v2/tickers/${spotSym}`, { headers });
+        if (spotRes.ok) {
+          const spotData = await spotRes.json();
+          const resObj = spotData.result;
+          if (resObj?.mark_price) {
+            underlyingSpotPrice = parseFloat(resObj.mark_price) || 0;
+            break;
+          } else if (resObj?.spot_price) {
+            underlyingSpotPrice = parseFloat(resObj.spot_price) || 0;
+            break;
+          } else if (resObj?.close) {
+            underlyingSpotPrice = parseFloat(resObj.close) || 0;
+            break;
+          }
         }
+      } catch {
+        // Try next symbol
       }
-    } catch {
-      // Fallback handled below
     }
 
     let rawProducts: any[] = [];
@@ -209,8 +214,8 @@ export async function GET(request: NextRequest) {
     const tickerMapBySymbol: Record<string, any> = {};
     for (const t of rawTickers) {
       if (t.symbol) tickerMapBySymbol[t.symbol] = t;
-      if (!underlyingSpotPrice && t.spot_price) {
-        underlyingSpotPrice = parseFloat(t.spot_price) || 0;
+      if (!underlyingSpotPrice && (t.spot_price || t.underlying_spot_price)) {
+        underlyingSpotPrice = parseFloat(t.spot_price || t.underlying_spot_price) || 0;
       }
     }
 
@@ -239,10 +244,10 @@ export async function GET(request: NextRequest) {
     const availableExpiries = Array.from(expirySet).sort();
     const requestedExpiries = rawExpiryParam ? rawExpiryParam.split(',').map((s) => s.trim()) : [];
     const isAllSelected = requestedExpiries.includes('all') || requestedExpiries.length === 0;
-    const activeExpiries = isAllSelected ? [availableExpiries[0] || ''] : requestedExpiries;
+    const activeExpiries = isAllSelected ? availableExpiries.slice(0, 2) : requestedExpiries;
 
     const expiryOptions = filteredOptions.filter((item: any) => {
-      if (requestedExpiries.includes('all')) return true;
+      if (requestedExpiries.includes('all') || requestedExpiries.length === 0) return true;
       const dateFromSymbol = parseExpiryFromSymbol(item.symbol || '');
       const settlement = item.settlement_time ? item.settlement_time.split('T')[0] : null;
       return activeExpiries.some((exp) => dateFromSymbol === exp || settlement === exp);
@@ -258,7 +263,7 @@ export async function GET(request: NextRequest) {
     const strikesMap: Record<number, { strike: number; call: OptionMetrics | null; put: OptionMetrics | null }> = {};
 
     for (const item of expiryOptions) {
-      const strike = parseFloat(item.strike_price);
+      const strike = parseFloat(item.strike_price || item.strike);
       if (isNaN(strike)) continue;
 
       if (!strikesMap[strike]) {
@@ -308,4 +313,101 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ... (rest of original route implementation)
+    const strikesList = Object.values(strikesMap).sort((a, b) => a.strike - b.strike);
+
+    let totalCallOi = 0;
+    let totalPutOi = 0;
+    let totalCallVolume = 0;
+    let totalPutVolume = 0;
+    let totalCallOiNotional = 0;
+    let totalPutOiNotional = 0;
+    let maxCallOi = 0;
+    let maxPutOi = 0;
+    let maxCallVolume = 0;
+    let maxPutVolume = 0;
+
+    const strikesData: StrikeRow[] = strikesList.map((row) => {
+      const callOi = row.call ? row.call.oi : 0;
+      const putOi = row.put ? row.put.oi : 0;
+      const callVolume = row.call ? row.call.volume : 0;
+      const putVolume = row.put ? row.put.volume : 0;
+      const callNotional = row.call ? row.call.notional : 0;
+      const putNotional = row.put ? row.put.notional : 0;
+
+      totalCallOi += callOi;
+      totalPutOi += putOi;
+      totalCallVolume += callVolume;
+      totalPutVolume += putVolume;
+      totalCallOiNotional += callNotional;
+      totalPutOiNotional += putNotional;
+
+      if (callOi > maxCallOi) maxCallOi = callOi;
+      if (putOi > maxPutOi) maxPutOi = putOi;
+      if (callVolume > maxCallVolume) maxCallVolume = callVolume;
+      if (putVolume > maxPutVolume) maxPutVolume = putVolume;
+
+      const strikePcr = callOi > 0 ? parseFloat((putOi / callOi).toFixed(2)) : putOi > 0 ? 99.9 : 0;
+      const volumePcr = callVolume > 0 ? parseFloat((putVolume / callVolume).toFixed(2)) : 0;
+
+      return {
+        strike: row.strike,
+        callOi,
+        putOi,
+        callVolume,
+        putVolume,
+        strikePcr,
+        volumePcr,
+        call: row.call,
+        put: row.put,
+      };
+    });
+
+    if (!underlyingSpotPrice && strikesList.length > 0) {
+      underlyingSpotPrice = strikesList[Math.floor(strikesList.length / 2)].strike;
+    }
+
+    const maxPainStrike = calculateMaxPain(strikesData);
+    const overallPcr = totalCallOi > 0 ? parseFloat((totalPutOi / totalCallOi).toFixed(3)) : 1.0;
+    const overallVolumePcr = totalCallVolume > 0 ? parseFloat((totalPutVolume / totalCallVolume).toFixed(3)) : 1.0;
+
+    const responsePayload = {
+      success: true,
+      asset,
+      underlyingSpotPrice,
+      timeframe,
+      selectedExpiries: activeExpiries,
+      availableExpiries,
+      summary: {
+        totalCallOi,
+        totalPutOi,
+        totalCallVolume,
+        totalPutVolume,
+        totalCallOiNotional,
+        totalPutOiNotional,
+        overallPcr,
+        overallVolumePcr,
+        sentiment: overallPcr >= 1.0 ? 'BUYING SIDE' : 'SELLING SIDE',
+        sentimentColor: overallPcr >= 1.0 ? 'emerald' : 'rose',
+        pcrDescription: overallPcr >= 1.0 ? 'Put writing dominant (buying support)' : 'Call writing dominant (capping upside)',
+        positionBuilding: 'Active liquidity buildup',
+        maxPainStrike,
+        contractsCount: expiryOptions.length,
+      },
+      matrix: strikesData,
+      updatedAt: new Date().toISOString(),
+    };
+
+    memoryCache.data[cacheKey] = responsePayload;
+    memoryCache.timestamp[cacheKey] = now;
+
+    return NextResponse.json(responsePayload, {
+      headers: { 'X-Cache': 'MISS' },
+    });
+  } catch (error: any) {
+    console.error('Options Matrix Route Error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to fetch options matrix data' },
+      { status: 500 }
+    );
+  }
+}
