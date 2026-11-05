@@ -104,8 +104,9 @@ const getDisplayAssetName = (token: string): string => {
 };
 
 // DEFAULT ASSET SET TO XAUT (DISPLAYED AS XAUUSD)
-export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }: OptionsMatrixProps) {
-  const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL' | 'XAUT'>(initialAsset);
+export default function OptionsMatrix({ className = '' }: OptionsMatrixProps) {
+  // XAUUSD (XAUT) is always the default on open
+  const [asset, setAsset] = useState<'BTC' | 'ETH' | 'SOL' | 'XAUT'>('XAUT');
   const [selectedExpiries, setSelectedExpiries] = useState<string[]>([]);
   const [expiryDropdownOpen, setExpiryDropdownOpen] = useState<boolean>(false);
   const [matrixViewMode, setMatrixViewMode] = useState<'all' | 'oi' | 'volume'>('all');
@@ -244,6 +245,17 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
+  };
+
+  // Value is in $M. >= 1M -> "1.23M", below 1M -> "210K", zero -> "0"
+  const formatM = (v: number | undefined | null) => {
+    const n = Number(v ?? 0);
+    if (!Number.isFinite(n) || n === 0) return '0';
+    const sign = n < 0 ? '-' : '';
+    const a = Math.abs(n);
+    if (a >= 1) return `${sign}${a.toFixed(2)}M`;
+    const k = a * 1000;
+    return `${sign}${k.toFixed(k >= 100 ? 0 : 1)}K`;
   };
 
   const formatPercentChange = (val: number | undefined | null) => {
@@ -457,7 +469,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         ? 'BEARISH ABSORPTION (SELLING SIDE)'
         : 'RANGEBOUND PINNING';
 
-    const verbalFlowNarrative = `Over the last ${timeframe}, Open Interest is actively shifting with net velocity at ${netVelocity > 0 ? '+' : ''}${netVelocity.toFixed(1)}%. Net Call OI change is ${formatNumber(flowAnalytics?.totalCallOiAdded, 2)}M while net Put OI change is ${formatNumber(flowAnalytics?.totalPutOiAdded, 2)}M (USD). Most aggressive additions are concentrating around strike $${formatNumber(flowAnalytics?.topShiftStrike, 0)}. Because options data reflects seller positioning (option writing), elevated PCR (${overallPcr.toFixed(2)}) indicates institutional market makers are aggressively selling puts to build downside floor support, capping breakdown risk below S1 ($${formatNumber(s1, 0)}). Conversely, strikes above $${formatNumber(r1, 0)} exhibit low PCR (${r1Pcr.toFixed(2)}), representing overhead call overhang where sellers are capping fast breakout attempts.`;
+    const verbalFlowNarrative = `Over the last ${timeframe}, Open Interest is actively shifting with net velocity at ${netVelocity > 0 ? '+' : ''}${netVelocity.toFixed(1)}%. Net Call OI change is ${formatM(flowAnalytics?.totalCallOiAdded)} while net Put OI change is ${formatM(flowAnalytics?.totalPutOiAdded)} (USD). Most aggressive additions are concentrating around strike $${formatNumber(flowAnalytics?.topShiftStrike, 0)}. Because options data reflects seller positioning (option writing), elevated PCR (${overallPcr.toFixed(2)}) indicates institutional market makers are aggressively selling puts to build downside floor support, capping breakdown risk below S1 ($${formatNumber(s1, 0)}). Conversely, strikes above $${formatNumber(r1, 0)} exhibit low PCR (${r1Pcr.toFixed(2)}), representing overhead call overhang where sellers are capping fast breakout attempts.`;
 
     const verbalBaselineNarrative = `Major daily structural liquidity rests between Strong Support at $${formatNumber(strongSupportStrike, 0)} (PCR: ${strongSupportPcr.toFixed(2)}) and Strongest Resistance at $${formatNumber(strongestResStrike, 0)} (PCR: ${strongestResPcr.toFixed(2)}). The No Trade Zone is defined between $${formatNumber(ntzLower, 0)} and $${formatNumber(ntzUpper, 0)}. Traders should stand aside during mid-corridor equilibrium chop and watch for high-probability buying opportunities on retests of high-PCR support levels ($${formatNumber(s1, 0)} - $${formatNumber(s3, 0)}) or selling opportunities at low-PCR resistance caps ($${formatNumber(r1, 0)} - $${formatNumber(r3, 0)}).`;
 
@@ -1176,7 +1188,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
                     <span className="text-[9px] text-slate-400">Total</span>
                     <span className="text-[11px] font-bold text-white">
-                      ${formatNumber(summary.totalCallOi + summary.totalPutOi, 2)}M
+                      ${formatM(summary.totalCallOi + summary.totalPutOi)}
                     </span>
                   </div>
                 </div>
@@ -1185,11 +1197,11 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               <div className="flex items-center justify-between w-full text-[10px] font-mono px-2 mt-1">
                 <div className="flex items-center gap-1 text-emerald-400">
                   <span className="w-2 h-2 rounded bg-emerald-500" />
-                  <span>Calls: ${formatNumber(summary?.totalCallOi, 2)}M</span>
+                  <span>Calls: ${formatM(summary?.totalCallOi)}</span>
                 </div>
                 <div className="flex items-center gap-1 text-rose-400">
                   <span className="w-2 h-2 rounded bg-rose-500" />
-                  <span>Puts: ${formatNumber(summary?.totalPutOi, 2)}M</span>
+                  <span>Puts: ${formatM(summary?.totalPutOi)}</span>
                 </div>
               </div>
             </div>
@@ -1213,7 +1225,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
           {flowAnalytics?.topShiftStrike && (
             <div className="px-3 py-1 bg-cyan-950/70 border border-cyan-500/40 rounded-lg text-cyan-300 font-bold text-xs flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Most OI Shifting To: Strike ${formatNumber(flowAnalytics.topShiftStrike, 0)} (±{formatNumber(flowAnalytics.maxTotalShiftContracts, 2)}M)</span>
+              <span>Most OI Shifting To: Strike ${formatNumber(flowAnalytics.topShiftStrike, 0)} (±{formatM(flowAnalytics.maxTotalShiftContracts)})</span>
             </div>
           )}
         </div>
@@ -1231,7 +1243,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
 
               // One bar: positive grows UP from the zero line, negative grows DOWN below it
               const bar = (v: number, color: string, label: string) => (
-                <div className="w-1/2 h-full flex flex-col" title={`${label}: ${v >= 0 ? '+' : ''}${formatNumber(v, 2)}M`}>
+                <div className="w-1/2 h-full flex flex-col" title={`${label}: ${v >= 0 ? '+' : ''}${formatM(v)}`}>
                   <div className="h-1/2 flex items-end">
                     {v > 0 && (
                       <div
@@ -1254,10 +1266,10 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               return (
                 <div className="relative min-w-max pl-12">
                   {/* y-axis labels + zero line (plot area is 11rem tall, zero at its middle) */}
-                  <span className="absolute left-0 top-0 text-[9px] font-mono text-slate-500">+{formatNumber(maxAbs, 2)}M</span>
+                  <span className="absolute left-0 top-0 text-[9px] font-mono text-slate-500">+{formatM(maxAbs)}</span>
                   <span className="absolute left-0 text-[9px] font-mono text-slate-400" style={{ top: '5.2rem' }}>0</span>
                   <span className="absolute left-0 text-[9px] font-mono text-slate-500" style={{ top: '10.2rem' }}>
-                    -{formatNumber(maxAbs, 2)}M
+                    -{formatM(maxAbs)}
                   </span>
                   <div
                     className="absolute left-12 right-0 border-t border-slate-500/70 pointer-events-none"
@@ -1335,7 +1347,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
                 <span className="text-[8px] text-slate-400">Total Shift</span>
                 <span className="text-[11px] font-bold text-cyan-300">
-                  {formatNumber((flowAnalytics?.totalCallAbs ?? 0) + (flowAnalytics?.totalPutAbs ?? 0), 2)}M
+                  {formatM((flowAnalytics?.totalCallAbs ?? 0) + (flowAnalytics?.totalPutAbs ?? 0))}
                 </span>
               </div>
             </div>
@@ -1343,11 +1355,11 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             <div className="flex items-center justify-between w-full text-[10px] font-mono px-2 mt-1">
               <div className="flex items-center gap-1 text-emerald-400">
                 <span className="w-2 h-2 rounded bg-emerald-500" />
-                <span>Calls: {formatNumber(flowAnalytics?.totalCallOiAdded, 2)}M</span>
+                <span>Calls: {formatM(flowAnalytics?.totalCallOiAdded)}</span>
               </div>
               <div className="flex items-center gap-1 text-rose-400">
                 <span className="w-2 h-2 rounded bg-rose-500" />
-                <span>Puts: {formatNumber(flowAnalytics?.totalPutOiAdded, 2)}M</span>
+                <span>Puts: {formatM(flowAnalytics?.totalPutOiAdded)}</span>
               </div>
             </div>
           </div>
@@ -1489,13 +1501,13 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
 
                         {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
                           <td className="py-2 px-3 text-right font-medium text-slate-200">
-                            {formatNumber(row.callOi, 2)}M
+                            {formatM(row.callOi)}
                           </td>
                         )}
 
                         {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
                           <td className="py-2 px-3 text-right font-medium text-cyan-300">
-                            {formatNumber(row.callVolume, 2)}M
+                            {formatM(row.callVolume)}
                           </td>
                         )}
 
@@ -1504,7 +1516,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                             {formatPercentChange(row.call?.oiChangePct)}
                           </div>
                           <div className="text-[9px] text-slate-500">
-                            {(row.call?.oiChange ?? 0) >= 0 ? '+' : ''}{formatNumber(row.call?.oiChange ?? 0, 2)}M
+                            {(row.call?.oiChange ?? 0) >= 0 ? '+' : ''}{formatM(row.call?.oiChange ?? 0)}
                           </div>
                         </td>
 
@@ -1524,19 +1536,19 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                             {formatPercentChange(row.put?.oiChangePct)}
                           </div>
                           <div className="text-[9px] text-slate-500">
-                            {(row.put?.oiChange ?? 0) >= 0 ? '+' : ''}{formatNumber(row.put?.oiChange ?? 0, 2)}M
+                            {(row.put?.oiChange ?? 0) >= 0 ? '+' : ''}{formatM(row.put?.oiChange ?? 0)}
                           </div>
                         </td>
 
                         {(matrixViewMode === 'all' || matrixViewMode === 'volume') && (
                           <td className="py-2 px-3 text-left font-medium text-cyan-300">
-                            {formatNumber(row.putVolume, 2)}M
+                            {formatM(row.putVolume)}
                           </td>
                         )}
 
                         {(matrixViewMode === 'all' || matrixViewMode === 'oi') && (
                           <td className="py-2 px-3 text-left font-medium text-slate-200">
-                            {formatNumber(row.putOi, 2)}M
+                            {formatM(row.putOi)}
                           </td>
                         )}
 
@@ -1643,12 +1655,12 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
                     <div
                       className="w-1/2 bg-cyan-500/80 rounded-t transition-all duration-500 group-hover:bg-cyan-300"
                       style={{ height: `${callHeight || 4}%` }}
-                      title={`Call Vol: $${formatNumber(r.callVolume, 2)}M`}
+                      title={`Call Vol: $${formatM(r.callVolume)}`}
                     />
                     <div
                       className="w-1/2 bg-amber-500/80 rounded-t transition-all duration-500 group-hover:bg-amber-300"
                       style={{ height: `${putHeight || 4}%` }}
-                      title={`Put Vol: $${formatNumber(r.putVolume, 2)}M`}
+                      title={`Put Vol: $${formatM(r.putVolume)}`}
                     />
                   </div>
                   <span className={`text-[9px] font-mono whitespace-nowrap ${isSpot ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>
@@ -1708,7 +1720,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
                 <span className="text-[8px] text-slate-400">Total Vol</span>
                 <span className="text-[11px] font-bold text-white">
-                  ${formatNumber((summary?.totalCallVolume || 0) + (summary?.totalPutVolume || 0), 2)}M
+                  ${formatM((summary?.totalCallVolume || 0) + (summary?.totalPutVolume || 0))}
                 </span>
               </div>
             </div>
@@ -1716,11 +1728,11 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             <div className="flex items-center justify-between w-full text-[10px] font-mono px-2 mt-1">
               <div className="flex items-center gap-1 text-cyan-400">
                 <span className="w-2 h-2 rounded bg-cyan-500" />
-                <span>Call Vol: ${formatNumber(summary?.totalCallVolume, 2)}M</span>
+                <span>Call Vol: ${formatM(summary?.totalCallVolume)}</span>
               </div>
               <div className="flex items-center gap-1 text-amber-400">
                 <span className="w-2 h-2 rounded bg-amber-500" />
-                <span>Put Vol: ${formatNumber(summary?.totalPutVolume, 2)}M</span>
+                <span>Put Vol: ${formatM(summary?.totalPutVolume)}</span>
               </div>
             </div>
           </div>
