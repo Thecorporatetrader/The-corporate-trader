@@ -1,696 +1,421 @@
+/**
+ * Next.js App Router API Route: /api/options
+ * Target path in repo: app/api/options/route.ts
+ *
+ * Data source: Delta Exchange India PUBLIC endpoint (no API key needed)
+ *   GET /v2/tickers?contract_types=call_options,put_options&underlying_asset_symbols=XAUT
+ *
+ * Field mapping:
+ *   oi_value_usd      -> Open Interest ($)   (what Delta's Options Analytics charts)
+ *   oi_contracts / oi -> OI in contracts     (used for Max Pain)
+ *   turnover_usd      -> Volume ($)
+ *   oi_change_usd_6h  -> OI change over last 6h ($)  (fallback until history exists)
+ *   spot_price        -> underlying spot
+ *   strike_price      -> strike
+ *
+ * Add ?debug=1 to the URL to see the raw ticker fields Delta returns.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
 
-type DeltaTicker = {
-  symbol?: string;
-  contract_type?: string;
-  strike_price?: string | number;
-  oi?: string | number;
-  oi_value?: string | number;
-  oi_value_symbol?: string;
-  oi_value_usd?: string | number;
-  volume?: string | number;
-  turnover?: string | number;
-  turnover_symbol?: string;
-  turnover_usd?: string | number;
-  mark_price?: string | number;
-  spot_price?: string | number;
-  timestamp?: number;
-  settlement_time?: string;
-  expiry_date?: string;
+const BASE_URL = process.env.DELTA_API_BASE_URL || 'https://api.india.delta.exchange';
+const M = 1_000_000;
+
+const TF_MS: Record<string, number> = {
+  '15m': 15 * 60_000,
+  '1h': 60 * 60_000,
+  '2h': 2 * 60 * 60_000,
+  '4h': 4 * 60 * 60_000,
+  '12h': 12 * 60 * 60_000,
+  '24h': 24 * 60 * 60_000,
 };
 
-type OptionSide = {
+interface OptionMetrics {
   symbol: string;
-  oiUsd: number | null;
-  volumeUsd: number | null;
-  oiContracts: number | null;
-  markPrice: number | null;
+  contractType: 'call' | 'put';
+  oi: number; // $M
+  oiChange: number; // $M
+  oiChangePct: number;
+  markPrice: number;
+  volume: number; // $M
+  notional: number; // $
+}
+
+interface Leg {
+  oiUsd: number;
+  oiContracts: number;
+  volUsd: number;
+  changeUsd: number;
+  prevUsd: number;
+  markPrice: number;
+  symbols: string[];
+}
+
+/* ---------------- caches ---------------- */
+
+const tickerCache: Record<string, { ts: number; tickers: any[] }> = {};
+const TICKER_TTL_MS = 5000;
+
+// OI snapshot history per asset, used to compute Δ for 15m/1h/2h/4h/12h/24h.
+// Lives in server memory: resets on cold start / serverless. Until enough
+// history exists we fall back to Delta's own 6h OI change field.
+interface Snapshot {
+  ts: number;
+  oi: Record<string, number>;
+}
+const history: Record<string, Snapshot[]> = {};
+const SNAPSHOT_EVERY_MS = 60_000;
+const HISTORY_KEEP_MS = 25 * 60 * 60_000;
+
+/* ---------------- helpers ---------------- */
+
+const num = (v: any): number => {
+  const n = typeof v === 'string' ? parseFloat(v) : Number(v);
+  return Number.isFinite(n) ? n : 0;
 };
+const round = (n: number, d = 2) => Number(n.toFixed(d));
 
-type MatrixRow = {
-  strike: number;
-  callOiUsd: number | null;
-  putOiUsd: number | null;
-  callVolumeUsd: number | null;
-  putVolumeUsd: number | null;
-  oiPcr: number | null;
-  volumePcr: number | null;
-  call: OptionSide | null;
-  put: OptionSide | null;
-};
-
-type ApiPayload = {
-  success: boolean;
-  asset: string;
-  underlyingSpotPrice: number | null;
-  availableExpiries: string[];
-  selectedExpiries: string[];
-  isMultiExpiry: boolean;
-  dataBasis: {
-    openInterest: string;
-    volume: string;
-    period: string;
-    timeframeChangesAvailable: false;
-  };
-  summary: {
-    totalCallOiUsd: number | null;
-    totalPutOiUsd: number | null;
-    totalCallVolumeUsd: number | null;
-    totalPutVolumeUsd: number | null;
-    overallOiPcr: number | null;
-    overallVolumePcr: number | null;
-    contractsCount: number;
-    strikesCount: number;
-  };
-  matrix: MatrixRow[];
-  updatedAt: string;
-};
-
-const CACHE_TTL_MS = 8_000;
-const REQUEST_TIMEOUT_MS = 10_000;
-const MAX_MULTI_EXPIRIES = 5;
-
-const cache = new Map<
-  string,
-  { timestamp: number; payload: ApiPayload }
->();
-
-function toNumber(value: unknown): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === '' ||
-    (typeof value === 'string' && value.trim() === '')
-  ) {
-    return null;
+/** C-XAUT-4020-041126 -> 2026-11-04 */
+function parseExpiryFromSymbol(symbol: string): string | null {
+  const raw = symbol.split('-')[3];
+  if (raw && raw.length === 6 && /^\d+$/.test(raw)) {
+    return `20${raw.slice(4, 6)}-${raw.slice(2, 4)}-${raw.slice(0, 2)}`;
   }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function positiveNumber(value: unknown): number | null {
-  const parsed = toNumber(value);
-  return parsed !== null && parsed > 0 ? parsed : null;
-}
-
-function isValidIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
-function parseExpiry(value: unknown): string | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
-
-  const input = value.trim();
-
-  // ISO date or ISO timestamp.
-  const isoMatch = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
-
-  if (isoMatch) {
-    const isoDate = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-    return isValidIsoDate(isoDate) ? isoDate : null;
-  }
-
-  // Delta option symbol suffix: DDMMYY.
-  const compactMatch = input.match(/(?:^|-)(\d{2})(\d{2})(\d{2})$/);
-
-  if (compactMatch) {
-    const [, day, month, year] = compactMatch;
-    const isoDate = `20${year}-${month}-${day}`;
-
-    return isValidIsoDate(isoDate) ? isoDate : null;
-  }
-
-  // YYYYMMDD.
-  const ymdMatch = input.match(/(?:^|-)(\d{4})(\d{2})(\d{2})$/);
-
-  if (ymdMatch) {
-    const [, year, month, day] = ymdMatch;
-    const isoDate = `${year}-${month}-${day}`;
-
-    return isValidIsoDate(isoDate) ? isoDate : null;
-  }
-
   return null;
 }
 
-function getTickerExpiry(ticker: DeltaTicker): string | null {
-  return (
-    parseExpiry(ticker.expiry_date) ??
-    parseExpiry(ticker.settlement_time) ??
-    parseExpiry(ticker.symbol)
-  );
+function expiryOf(t: any): string | null {
+  return parseExpiryFromSymbol(t.symbol || '') || (t.settlement_time ? String(t.settlement_time).split('T')[0] : null);
 }
 
-function getOptionType(
-  ticker: DeltaTicker,
-): 'call' | 'put' | null {
-  const type = ticker.contract_type?.toLowerCase();
-  const symbol = ticker.symbol ?? '';
-
-  if (type === 'call_options' || symbol.startsWith('C-')) {
-    return 'call';
+function calculateMaxPain(rows: { strike: number; callContracts: number; putContracts: number }[]): number | null {
+  if (!rows.length) return null;
+  let best: number | null = null;
+  let min = Infinity;
+  for (const { strike: price } of rows) {
+    let loss = 0;
+    for (const r of rows) {
+      if (price > r.strike) loss += (price - r.strike) * r.callContracts;
+      if (price < r.strike) loss += (r.strike - price) * r.putContracts;
+    }
+    if (loss < min) {
+      min = loss;
+      best = price;
+    }
   }
-
-  if (type === 'put_options' || symbol.startsWith('P-')) {
-    return 'put';
-  }
-
-  return null;
+  return best;
 }
 
-/**
- * Use Delta's USD-denominated OI value.
- * Never estimate OI USD from contracts multiplied by strike.
- */
-function getOiUsd(ticker: DeltaTicker): number | null {
-  const directUsd = toNumber(ticker.oi_value_usd);
+async function getOptionTickers(asset: string): Promise<any[]> {
+  const cached = tickerCache[asset];
+  if (cached && Date.now() - cached.ts < TICKER_TTL_MS) return cached.tickers;
 
-  if (directUsd !== null) return directUsd;
-
-  if (ticker.oi_value_symbol?.toUpperCase() === 'USD') {
-    return toNumber(ticker.oi_value);
-  }
-
-  return null;
-}
-
-/**
- * Use Delta's USD-denominated turnover.
- * Never estimate USD turnover from contracts multiplied by premium.
- */
-function getVolumeUsd(ticker: DeltaTicker): number | null {
-  const directUsd = toNumber(ticker.turnover_usd);
-
-  if (directUsd !== null) return directUsd;
-
-  if (ticker.turnover_symbol?.toUpperCase() === 'USD') {
-    return toNumber(ticker.turnover);
-  }
-
-  return null;
-}
-
-function sumKnown(values: Array<number | null>): number | null {
-  const known = values.filter(
-    (value): value is number => value !== null,
-  );
-
-  if (known.length === 0) return null;
-
-  return known.reduce((total, value) => total + value, 0);
-}
-
-function ratio(
-  numerator: number | null,
-  denominator: number | null,
-): number | null {
-  if (
-    numerator === null ||
-    denominator === null ||
-    denominator === 0
-  ) {
-    return null;
-  }
-
-  return Number((numerator / denominator).toFixed(3));
-}
-
-function expiryToDeltaFormat(isoDate: string): string {
-  if (!isValidIsoDate(isoDate)) {
-    throw new Error('Invalid expiry date.');
-  }
-
-  const [year, month, day] = isoDate.split('-');
-  return `${day}-${month}-${year}`;
-}
-
-async function fetchDeltaTickers(
-  baseUrl: string,
-  asset: string,
-  expiry?: string,
-): Promise<DeltaTicker[]> {
-  const url = new URL('/v2/tickers', baseUrl);
-
-  url.searchParams.set(
-    'contract_types',
-    'call_options,put_options',
-  );
-
-  url.searchParams.set('underlying_asset_symbols', asset);
-
-  if (expiry) {
-    url.searchParams.set(
-      'expiry_date',
-      expiryToDeltaFormat(expiry),
-    );
-  }
-
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
+  const url = `${BASE_URL}/v2/tickers?contract_types=call_options,put_options&underlying_asset_symbols=${asset}`;
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json', 'User-Agent': 'TheCorporateTrader-OptionsMatrix/1.0' },
     cache: 'no-store',
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
-  if (!response.ok) {
-    const error = new Error(
-      `Delta API returned HTTP ${response.status}`,
-    );
-
-    (error as Error & { status?: number }).status = response.status;
-    throw error;
+  if (res.status === 429) {
+    if (cached) return cached.tickers;
+    throw Object.assign(new Error('Delta Exchange rate limit reached (429).'), { status: 429 });
   }
+  if (!res.ok) throw new Error(`Delta Exchange HTTP ${res.status}`);
 
-  const json = await response.json();
-
-  if (!json?.success || !Array.isArray(json.result)) {
-    throw new Error('Delta returned an invalid ticker response.');
-  }
-
-  return json.result as DeltaTicker[];
+  const json = await res.json();
+  const tickers: any[] = Array.isArray(json.result) ? json.result : [];
+  tickerCache[asset] = { ts: Date.now(), tickers };
+  return tickers;
 }
 
-function buildMatrix(tickers: DeltaTicker[]): {
-  matrix: MatrixRow[];
-  spotPrice: number | null;
-  contractsCount: number;
-} {
-  const byStrike = new Map<
-    number,
-    { calls: OptionSide[]; puts: OptionSide[] }
-  >();
+function recordSnapshot(asset: string, tickers: any[]) {
+  const now = Date.now();
+  const list = (history[asset] ||= []);
+  const last = list[list.length - 1];
+  if (last && now - last.ts < SNAPSHOT_EVERY_MS) return;
+  const oi: Record<string, number> = {};
+  for (const t of tickers) if (t.symbol) oi[t.symbol] = num(t.oi_value_usd);
+  list.push({ ts: now, oi });
+  while (list.length && now - list[0].ts > HISTORY_KEEP_MS) list.shift();
+}
 
-  const seenSymbols = new Set<string>();
-
-  let spotPrice: number | null = null;
-  let contractsCount = 0;
-
-  for (const ticker of tickers) {
-    const symbol = ticker.symbol ?? '';
-
-    if (!symbol || seenSymbols.has(symbol)) continue;
-
-    seenSymbols.add(symbol);
-
-    const optionType = getOptionType(ticker);
-
-    if (!optionType) continue;
-
-    const strike = positiveNumber(ticker.strike_price);
-
-    if (strike === null) continue;
-
-    // Keep searching until a valid spot price is found.
-    if (spotPrice === null) {
-      spotPrice = positiveNumber(ticker.spot_price);
-    }
-
-    const side: OptionSide = {
-      symbol,
-      oiUsd: getOiUsd(ticker),
-      volumeUsd: getVolumeUsd(ticker),
-      oiContracts: toNumber(ticker.oi),
-      markPrice: positiveNumber(ticker.mark_price),
-    };
-
-    if (!byStrike.has(strike)) {
-      byStrike.set(strike, { calls: [], puts: [] });
-    }
-
-    const bucket = byStrike.get(strike)!;
-
-    if (optionType === 'call') {
-      bucket.calls.push(side);
-    } else {
-      bucket.puts.push(side);
-    }
-
-    contractsCount += 1;
+/** newest snapshot at least tfMs old, or null if history is too short */
+function findBaseline(asset: string, tfMs: number): Snapshot | null {
+  const target = Date.now() - tfMs;
+  let found: Snapshot | null = null;
+  for (const s of history[asset] || []) {
+    if (s.ts <= target) found = s;
+    else break;
   }
-
-  const matrix: MatrixRow[] = Array.from(byStrike.entries())
-    .map(([strike, sides]) => {
-      const callOiUsd = sumKnown(
-        sides.calls.map((item) => item.oiUsd),
-      );
-
-      const putOiUsd = sumKnown(
-        sides.puts.map((item) => item.oiUsd),
-      );
-
-      const callVolumeUsd = sumKnown(
-        sides.calls.map((item) => item.volumeUsd),
-      );
-
-      const putVolumeUsd = sumKnown(
-        sides.puts.map((item) => item.volumeUsd),
-      );
-
-      const call: OptionSide | null =
-        sides.calls.length > 0
-          ? {
-              symbol: sides.calls
-                .map((item) => item.symbol)
-                .join(', '),
-              oiUsd: callOiUsd,
-              volumeUsd: callVolumeUsd,
-              oiContracts: sumKnown(
-                sides.calls.map((item) => item.oiContracts),
-              ),
-              markPrice: sides.calls[0].markPrice,
-            }
-          : null;
-
-      const put: OptionSide | null =
-        sides.puts.length > 0
-          ? {
-              symbol: sides.puts
-                .map((item) => item.symbol)
-                .join(', '),
-              oiUsd: putOiUsd,
-              volumeUsd: putVolumeUsd,
-              oiContracts: sumKnown(
-                sides.puts.map((item) => item.oiContracts),
-              ),
-              markPrice: sides.puts[0].markPrice,
-            }
-          : null;
-
-      return {
-        strike,
-        callOiUsd,
-        putOiUsd,
-        callVolumeUsd,
-        putVolumeUsd,
-        oiPcr: ratio(putOiUsd, callOiUsd),
-        volumePcr: ratio(putVolumeUsd, callVolumeUsd),
-        call,
-        put,
-      };
-    })
-    .sort((a, b) => a.strike - b.strike);
-
-  return {
-    matrix,
-    spotPrice,
-    contractsCount,
-  };
+  return found;
 }
 
-function makePayload(
-  asset: string,
-  selectedExpiries: string[],
-  availableExpiries: string[],
-  tickers: DeltaTicker[],
-): ApiPayload {
-  const { matrix, spotPrice, contractsCount } =
-    buildMatrix(tickers);
-
-  const totalCallOiUsd = sumKnown(
-    matrix.map((row) => row.callOiUsd),
-  );
-
-  const totalPutOiUsd = sumKnown(
-    matrix.map((row) => row.putOiUsd),
-  );
-
-  const totalCallVolumeUsd = sumKnown(
-    matrix.map((row) => row.callVolumeUsd),
-  );
-
-  const totalPutVolumeUsd = sumKnown(
-    matrix.map((row) => row.putVolumeUsd),
-  );
-
-  return {
-    success: true,
-    asset,
-    underlyingSpotPrice: spotPrice,
-    availableExpiries,
-    selectedExpiries,
-    isMultiExpiry: selectedExpiries.length > 1,
-
-    dataBasis: {
-      openInterest: 'USD open-interest value (Delta oi_value_usd)',
-      volume: 'USD turnover (Delta turnover_usd)',
-      period:
-        'Current Delta ticker/session values; not an intraday historical window',
-      timeframeChangesAvailable: false,
-    },
-
-    summary: {
-      totalCallOiUsd,
-      totalPutOiUsd,
-      totalCallVolumeUsd,
-      totalPutVolumeUsd,
-      overallOiPcr: ratio(totalPutOiUsd, totalCallOiUsd),
-      overallVolumePcr: ratio(
-        totalPutVolumeUsd,
-        totalCallVolumeUsd,
-      ),
-      contractsCount,
-      strikesCount: matrix.length,
-    },
-
-    matrix,
-    updatedAt: new Date().toISOString(),
-  };
-}
+/* ---------------- handler ---------------- */
 
 export async function GET(request: NextRequest) {
-  const params = request.nextUrl.searchParams;
-
-  const asset = (params.get('asset') || 'BTC').toUpperCase();
-
-  const allowedAssets = new Set(['BTC', 'ETH', 'SOL', 'XAUT']);
-
-  if (!allowedAssets.has(asset)) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Unsupported underlying asset.',
-      },
-      { status: 400 },
-    );
-  }
-
-  const rawExpiry = params.get('expiry');
-
-  const requestedExpiries = rawExpiry
-    ? [
-        ...new Set(
-          rawExpiry
-            .split(',')
-            .map((value) => value.trim())
-            .filter(Boolean),
-        ),
-      ].sort()
-    : [];
-
-  if (
-    requestedExpiries.some((value) => !isValidIsoDate(value)) ||
-    requestedExpiries.length > MAX_MULTI_EXPIRIES
-  ) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: `Choose up to ${MAX_MULTI_EXPIRIES} valid expiry dates.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  const cacheKey =
-    `${asset}:${requestedExpiries.join(',') || 'nearest'}`;
-
-  const cached = cache.get(cacheKey);
-
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return NextResponse.json(cached.payload, {
-      headers: {
-        'X-Cache': 'HIT',
-        'Cache-Control': 'no-store',
-      },
-    });
-  }
-
-  const baseUrl = (
-    process.env.DELTA_API_BASE_URL ||
-    'https://api.india.delta.exchange'
-  ).replace(/\/+$/, '');
+  const { searchParams } = new URL(request.url);
+  const asset = (searchParams.get('asset') || 'BTC').toUpperCase();
+  const timeframe = (searchParams.get('timeframe') || '1h').toLowerCase();
+  const rawExpiry = searchParams.get('expiry');
+  const debug = searchParams.get('debug') === '1';
 
   try {
-    // First fetch: discover available expiries.
-    const allTickers = await fetchDeltaTickers(baseUrl, asset);
+    const tickers = await getOptionTickers(asset);
 
-    const today = new Date().toISOString().slice(0, 10);
-
-    const availableExpiries = [
-      ...new Set(
-        allTickers
-          .map(getTickerExpiry)
-          .filter(
-            (expiry): expiry is string =>
-              expiry !== null && expiry >= today,
-          ),
-      ),
-    ].sort();
-
-    if (availableExpiries.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Delta returned no active option expiries for ${asset}.`,
-          asset,
-        },
-        { status: 404 },
-      );
-    }
-
-    // Default to nearest expiry.
-    const selectedExpiries =
-      requestedExpiries.length > 0
-        ? requestedExpiries
-        : [availableExpiries[0]];
-
-    const unavailable = selectedExpiries.filter(
-      (expiry) => !availableExpiries.includes(expiry),
-    );
-
-    if (unavailable.length > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            `Expiry not available for ${asset}: ` +
-            unavailable.join(', '),
-          availableExpiries,
-        },
-        { status: 400 },
-      );
-    }
-
-    // Fetch each selected expiry separately.
-    const selectedTickerGroups = await Promise.all(
-      selectedExpiries.map((expiry) =>
-        fetchDeltaTickers(baseUrl, asset, expiry),
-      ),
-    );
-
-    // Keep only the exact selected expiries and remove duplicate symbols.
-    const seenSymbols = new Set<string>();
-
-    const selectedTickers = selectedTickerGroups
-      .flat()
-      .filter((ticker) => {
-        const tickerExpiry = getTickerExpiry(ticker);
-        const symbol = ticker.symbol ?? '';
-
-        if (
-          !tickerExpiry ||
-          !selectedExpiries.includes(tickerExpiry) ||
-          !symbol ||
-          seenSymbols.has(symbol)
-        ) {
-          return false;
-        }
-
-        seenSymbols.add(symbol);
-        return true;
-      });
-
-    if (selectedTickers.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'No option ticker data returned for the selected expiry.',
-          availableExpiries,
-          selectedExpiries,
-        },
-        { status: 404 },
-      );
-    }
-
-    const payload = makePayload(
-      asset,
-      selectedExpiries,
-      availableExpiries,
-      selectedTickers,
-    );
-
-    cache.set(cacheKey, {
-      timestamp: Date.now(),
-      payload,
+    const options = tickers.filter((t: any) => {
+      const sym: string = t.symbol || '';
+      const isCall = t.contract_type === 'call_options' || sym.startsWith('C-');
+      const isPut = t.contract_type === 'put_options' || sym.startsWith('P-');
+      if (!isCall && !isPut) return false;
+      const underlying = t.underlying_asset_symbol || t.underlying_asset?.symbol;
+      return underlying ? underlying === asset : sym.includes(`-${asset}-`);
     });
 
-    // Keep the in-memory cache bounded.
-    if (cache.size > 100) {
-      const oldestKey = cache.keys().next().value;
+    if (debug) {
+      return NextResponse.json({
+        count: options.length,
+        sampleCall: options.find((t) => String(t.contract_type).startsWith('call')) ?? null,
+        samplePut: options.find((t) => String(t.contract_type).startsWith('put')) ?? null,
+      });
+    }
 
-      if (oldestKey) {
-        cache.delete(oldestKey);
+    if (options.length === 0) {
+      return NextResponse.json(
+        { success: false, error: `Delta returned no option tickers for ${asset}.` },
+        { status: 502 }
+      );
+    }
+
+    recordSnapshot(asset, options);
+
+    /* expiries */
+    const expirySet = new Set<string>();
+    for (const t of options) {
+      const e = expiryOf(t);
+      if (e) expirySet.add(e);
+    }
+    const availableExpiries = Array.from(expirySet).sort();
+
+    const requested = rawExpiry
+      ? rawExpiry.split(',').map((s) => s.trim()).filter((s) => availableExpiries.includes(s)).slice(0, 3)
+      : [];
+    // Delta's analytics page shows ONE expiry at a time -> default to nearest
+    const activeExpiries = requested.length ? requested : availableExpiries.slice(0, 1);
+
+    const selected = options.filter((t) => {
+      const e = expiryOf(t);
+      return !!e && activeExpiries.includes(e);
+    });
+
+    /* spot */
+    let spot = 0;
+    for (const t of selected.length ? selected : options) {
+      const s = num(t.spot_price ?? t.underlying_spot_price);
+      if (s > 0) {
+        spot = s;
+        break;
       }
     }
 
-    return NextResponse.json(payload, {
-      headers: {
-        'X-Cache': 'MISS',
-        'Cache-Control': 'no-store',
-      },
-    });
-  } catch (error) {
-    const status = (
-      error as Error & { status?: number }
-    ).status;
-
-    const stale = cache.get(cacheKey);
-
-    // Serve a known successful snapshot during temporary API/network failure.
-    if (stale) {
-      return NextResponse.json(
-        {
-          ...stale.payload,
-          isStale: true,
-          warning:
-            'Delta is temporarily unavailable. Showing the last successful snapshot.',
-        },
-        {
-          headers: {
-            'X-Cache': 'STALE',
-            'Cache-Control': 'no-store',
-          },
-        },
-      );
+    /* spot fallback: options tickers sometimes omit spot_price */
+    if (!spot) {
+      for (const sym of [`${asset}USD`, `${asset}USDT`]) {
+        try {
+          const r = await fetch(`${BASE_URL}/v2/tickers/${sym}`, { cache: 'no-store' });
+          if (!r.ok) continue;
+          const j = await r.json();
+          const p = num(j?.result?.spot_price ?? j?.result?.mark_price);
+          if (p > 0) {
+            spot = p;
+            break;
+          }
+        } catch {
+          /* try next symbol */
+        }
+      }
     }
 
-    console.error('[TCT Options API]', error);
+    /* Δ baseline */
+    const baseline = findBaseline(asset, TF_MS[timeframe] ?? TF_MS['1h']);
+    const oiChangeBasis = baseline ? timeframe : '6h';
+
+    /* aggregate by strike */
+    const map = new Map<number, { call: Leg | null; put: Leg | null }>();
+
+    for (const t of selected) {
+      const strike = num(t.strike_price ?? t.strike);
+      if (!strike) continue;
+      const isCall = t.contract_type === 'call_options' || (t.symbol || '').startsWith('C-');
+
+      const contracts = num(t.oi_contracts ?? t.oi);
+      let oiUsd = num(t.oi_value_usd);
+      if (!oiUsd && t.contract_value) oiUsd = contracts * num(t.contract_value) * (spot || strike);
+
+      const volUsd = num(t.turnover_usd ?? t.turnover);
+
+      let changeUsd: number;
+      let prevUsd: number;
+      if (baseline) {
+        prevUsd = baseline.oi[t.symbol] ?? 0;
+        changeUsd = oiUsd - prevUsd;
+      } else {
+        changeUsd = num(t.oi_change_usd_6h);
+        prevUsd = oiUsd - changeUsd;
+      }
+
+      const row = map.get(strike) || { call: null, put: null };
+      const key = isCall ? 'call' : 'put';
+      const leg: Leg = row[key] || {
+        oiUsd: 0,
+        oiContracts: 0,
+        volUsd: 0,
+        changeUsd: 0,
+        prevUsd: 0,
+        markPrice: num(t.mark_price),
+        symbols: [],
+      };
+      leg.oiUsd += oiUsd;
+      leg.oiContracts += contracts;
+      leg.volUsd += volUsd;
+      leg.changeUsd += changeUsd;
+      leg.prevUsd += prevUsd;
+      leg.symbols.push(t.symbol);
+      row[key] = leg;
+      map.set(strike, row);
+    }
+
+    const strikes = Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+    if (!spot && strikes.length) spot = strikes[Math.floor(strikes.length / 2)][0];
+
+    const toMetrics = (leg: Leg | null, type: 'call' | 'put', strike: number): OptionMetrics | null =>
+      leg
+        ? {
+            symbol: leg.symbols[0] || `${type}-${strike}`,
+            contractType: type,
+            oi: round(leg.oiUsd / M),
+            oiChange: round(leg.changeUsd / M),
+            oiChangePct: leg.prevUsd > 0 ? round((leg.changeUsd / leg.prevUsd) * 100, 1) : 0,
+            markPrice: leg.markPrice,
+            volume: round(leg.volUsd / M),
+            notional: leg.oiUsd,
+          }
+        : null;
+
+    let totalCallUsd = 0;
+    let totalPutUsd = 0;
+    let totalCallVolUsd = 0;
+    let totalPutVolUsd = 0;
+    let maxCall = 0;
+    let maxPut = 0;
+
+    const base = strikes.map(([strike, r]) => {
+      const callUsd = r.call?.oiUsd ?? 0;
+      const putUsd = r.put?.oiUsd ?? 0;
+      totalCallUsd += callUsd;
+      totalPutUsd += putUsd;
+      totalCallVolUsd += r.call?.volUsd ?? 0;
+      totalPutVolUsd += r.put?.volUsd ?? 0;
+      maxCall = Math.max(maxCall, callUsd);
+      maxPut = Math.max(maxPut, putUsd);
+      return {
+        strike,
+        callUsd,
+        putUsd,
+        callVolUsd: r.call?.volUsd ?? 0,
+        putVolUsd: r.put?.volUsd ?? 0,
+        callContracts: r.call?.oiContracts ?? 0,
+        putContracts: r.put?.oiContracts ?? 0,
+        call: toMetrics(r.call, 'call', strike),
+        put: toMetrics(r.put, 'put', strike),
+      };
+    });
+
+    const maxPainStrike = calculateMaxPain(base);
+
+    const above = base.filter((r) => r.strike >= spot);
+    const below = base.filter((r) => r.strike < spot);
+    const top = (rows: typeof base, k: 'callUsd' | 'putUsd') =>
+      rows.reduce<(typeof base)[number] | null>((b, r) => (!b || r[k] > b[k] ? r : b), null);
+    const strongestResistance = top(above, 'callUsd')?.strike ?? null;
+    const strongestSupport = top(below, 'putUsd')?.strike ?? null;
+
+    let maxCallVol = 0;
+    let maxPutVol = 0;
+    for (const r of base) {
+      maxCallVol = Math.max(maxCallVol, r.callVolUsd);
+      maxPutVol = Math.max(maxPutVol, r.putVolUsd);
+    }
+
+    const matrix = base.map((r) => {
+      const signals: string[] = [];
+      if (r.strike === maxPainStrike) signals.push('Max Pain');
+      if (r.strike === strongestResistance) signals.push('Call Wall');
+      if (r.strike === strongestSupport) signals.push('Put Wall');
+      return {
+        strike: r.strike,
+        callOi: round(r.callUsd / M),
+        putOi: round(r.putUsd / M),
+        callVolume: round(r.callVolUsd / M),
+        putVolume: round(r.putVolUsd / M),
+        strikePcr: r.callUsd > 0 ? round(r.putUsd / r.callUsd) : r.putUsd > 0 ? 99.9 : 0,
+        volumePcr: r.callVolUsd > 0 ? round(r.putVolUsd / r.callVolUsd) : 0,
+        callBarPct: maxCall > 0 ? Math.round((r.callUsd / maxCall) * 100) : 0,
+        putBarPct: maxPut > 0 ? Math.round((r.putUsd / maxPut) * 100) : 0,
+        callVolBarPct: maxCallVol > 0 ? Math.round((r.callVolUsd / maxCallVol) * 100) : 0,
+        putVolBarPct: maxPutVol > 0 ? Math.round((r.putVolUsd / maxPutVol) * 100) : 0,
+        isItmCall: spot > r.strike,
+        isItmPut: spot < r.strike,
+        signals,
+        call: r.call,
+        put: r.put,
+      };
+    });
+
+    const overallPcr = totalCallUsd > 0 ? round(totalPutUsd / totalCallUsd, 2) : 0;
+    const overallVolumePcr = totalCallVolUsd > 0 ? round(totalPutVolUsd / totalCallVolUsd, 2) : 0;
 
     return NextResponse.json(
       {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unable to load Delta options data.',
+        success: true,
+        asset,
+        underlyingSpotPrice: spot,
+        timeframe,
+        oiChangeBasis,
+        selectedExpiries: activeExpiries,
+        availableExpiries,
+        summary: {
+          totalCallOi: round(totalCallUsd / M),
+          totalPutOi: round(totalPutUsd / M),
+          totalCallVolume: round(totalCallVolUsd / M),
+          totalPutVolume: round(totalPutVolUsd / M),
+          totalCallOiNotional: totalCallUsd,
+          totalPutOiNotional: totalPutUsd,
+          overallPcr,
+          overallVolumePcr,
+          sentiment: overallPcr >= 1 ? 'BUYING SIDE' : 'SELLING SIDE',
+          sentimentColor: overallPcr >= 1 ? 'emerald' : 'rose',
+          pcrDescription:
+            overallPcr >= 1 ? 'Put writing dominant (buying support)' : 'Call writing dominant (capping upside)',
+          positionBuilding: '',
+          maxPainStrike,
+          nearestResistance: above[0]?.strike ?? null,
+          strongestResistance,
+          nearestSupport: below[below.length - 1]?.strike ?? null,
+          strongestSupport,
+          contractsCount: selected.length,
+        },
+        matrix,
+        updatedAt: new Date().toISOString(),
       },
-      {
-        status: status === 429 ? 429 : 502,
-        headers: { 'Cache-Control': 'no-store' },
-      },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
+  } catch (error: any) {
+    console.error('Options Matrix Route Error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Failed to fetch options data' },
+      { status: error.status || 500 }
     );
   }
 }
