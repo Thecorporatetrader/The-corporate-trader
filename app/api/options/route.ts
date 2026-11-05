@@ -28,6 +28,7 @@ const TF_MS: Record<string, number> = {
   '1h': 60 * 60_000,
   '2h': 2 * 60 * 60_000,
   '4h': 4 * 60 * 60_000,
+  '6h': 6 * 60 * 60_000,
   '12h': 12 * 60 * 60_000,
   '24h': 24 * 60 * 60_000,
 };
@@ -238,7 +239,9 @@ export async function GET(request: NextRequest) {
     }
 
     /* Δ baseline */
-    const baseline = findBaseline(asset, TF_MS[timeframe] ?? TF_MS['1h']);
+    // 6h = Delta's own oi_change_usd_6h field (exact, works on every request).
+    // Other windows need our own snapshot history.
+    const baseline = timeframe === '6h' ? null : findBaseline(asset, TF_MS[timeframe] ?? TF_MS['1h']);
     const oiChangeBasis = baseline ? timeframe : '6h';
 
     /* aggregate by strike */
