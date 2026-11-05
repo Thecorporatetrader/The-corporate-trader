@@ -157,7 +157,7 @@ function findBaseline(asset: string, tfMs: number): Snapshot | null {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const asset = (searchParams.get('asset') || 'BTC').toUpperCase();
+  const asset = (searchParams.get('asset') || 'XAUT').toUpperCase();
   const timeframe = (searchParams.get('timeframe') || '1h').toLowerCase();
   const rawExpiry = searchParams.get('expiry');
   const debug = searchParams.get('debug') === '1';
