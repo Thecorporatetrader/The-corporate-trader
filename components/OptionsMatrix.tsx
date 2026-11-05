@@ -109,7 +109,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
   const [selectedExpiries, setSelectedExpiries] = useState<string[]>([]);
   const [expiryDropdownOpen, setExpiryDropdownOpen] = useState<boolean>(false);
   const [matrixViewMode, setMatrixViewMode] = useState<'all' | 'oi' | 'volume'>('all');
-  const [timeframe, setTimeframe] = useState<'15m' | '1h' | '2h' | '4h' | '12h' | '24h'>('1h');
+  const [timeframe, setTimeframe] = useState<'15m' | '1h' | '2h' | '4h' | '6h' | '12h' | '24h'>('6h');
 
   // Single dropdown toggle for all verbal narrative explanations
   const [narrativeOpen, setNarrativeOpen] = useState<boolean>(false);
@@ -565,7 +565,7 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
             <span className="text-[10px] text-slate-500 font-mono px-1 flex items-center gap-0.5">
               <Clock className="w-3 h-3 text-cyan-400" />
             </span>
-            {(['15m', '1h', '2h', '4h', '12h', '24h'] as const).map((tf) => (
+            {(['15m', '1h', '2h', '4h', '6h', '12h', '24h'] as const).map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
@@ -1202,9 +1202,12 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
         <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 mb-3 px-1 gap-2 border-b border-slate-800 pb-2">
           <div>
             <span className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider block">
-              Open Interest (OI) Shift in $M ({timeframe})
+              Open Interest (OI) Shift in $M (last {data?.oiChangeBasis ?? timeframe})
             </span>
-            <span className="text-[10px] text-slate-500">OI value change in $M (negative = unwound)</span>
+            <span className="text-[10px] text-slate-500">Above 0 = OI added · below 0 = OI unwound
+              {data?.oiChangeBasis && data.oiChangeBasis !== timeframe
+                ? ` · ${timeframe} history still building, showing Delta's ${data.oiChangeBasis} change`
+                : ''}</span>
           </div>
 
           {flowAnalytics?.topShiftStrike && (
@@ -1217,37 +1220,70 @@ export default function OptionsMatrix({ initialAsset = 'XAUT', className = '' }:
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-center">
           {/* Left 2 Cols: Shift Bars with Guaranteed Non-Zero Heights */}
-          <div className="lg:col-span-2 h-48 w-full bg-slate-900/40 rounded-lg p-2 flex items-end gap-1.5 overflow-x-auto">
-            {flowAnalytics?.rowsWithShifts?.map((r) => {
-              const maxShift = Math.max(
-                1,
-                ...flowAnalytics.rowsWithShifts.map((m) => Math.max(Math.abs(m.derivedCallShift), Math.abs(m.derivedPutShift)))
+          <div className="lg:col-span-2 w-full bg-slate-900/40 rounded-lg p-2 overflow-x-auto">
+            {(() => {
+              const rows = flowAnalytics?.rowsWithShifts ?? [];
+              const maxAbs = Math.max(
+                1e-9,
+                ...rows.map((m) => Math.max(Math.abs(m.derivedCallShift), Math.abs(m.derivedPutShift)))
               );
+              const step = filteredMatrix[1]?.strike - filteredMatrix[0]?.strike || 500;
 
-              const callHeight = Math.min(100, Math.max(2, Math.round((Math.abs(r.derivedCallShift) / maxShift) * 100)));
-              const putHeight = Math.min(100, Math.max(2, Math.round((Math.abs(r.derivedPutShift) / maxShift) * 100)));
-              const isSpot = spotPrice > 0 && Math.abs(r.strike - spotPrice) <= (filteredMatrix[1]?.strike - filteredMatrix[0]?.strike || 500);
-
-              return (
-                <div key={r.strike} className="flex-1 min-w-[42px] flex flex-col items-center h-full justify-end group relative">
-                  <div className="w-full flex items-end justify-center gap-0.5 h-36 mb-1">
-                    <div
-                      className="w-1/2 bg-emerald-500/80 rounded-t transition-all duration-500 group-hover:bg-emerald-400"
-                      style={{ height: `${callHeight}%` }}
-                      title={`Call OI Δ: ${formatNumber(r.derivedCallShift, 2)}M`}
-                    />
-                    <div
-                      className="w-1/2 bg-rose-500/80 rounded-t transition-all duration-500 group-hover:bg-rose-400"
-                      style={{ height: `${putHeight}%` }}
-                      title={`Put OI Δ: ${formatNumber(r.derivedPutShift, 2)}M`}
-                    />
+              // One bar: positive grows UP from the zero line, negative grows DOWN below it
+              const bar = (v: number, color: string, label: string) => (
+                <div className="w-1/2 h-full flex flex-col" title={`${label}: ${v >= 0 ? '+' : ''}${formatNumber(v, 2)}M`}>
+                  <div className="h-1/2 flex items-end">
+                    {v > 0 && (
+                      <div
+                        className={`w-full ${color} rounded-t transition-all duration-500`}
+                        style={{ height: `${Math.max(2, (v / maxAbs) * 100)}%` }}
+                      />
+                    )}
                   </div>
-                  <span className={`text-[9px] font-mono whitespace-nowrap ${isSpot ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}>
-                    ${formatNumber(r.strike, 0)}
-                  </span>
+                  <div className="h-1/2 flex items-start">
+                    {v < 0 && (
+                      <div
+                        className={`w-full ${color} rounded-b transition-all duration-500`}
+                        style={{ height: `${Math.max(2, (Math.abs(v) / maxAbs) * 100)}%` }}
+                      />
+                    )}
+                  </div>
                 </div>
               );
-            })}
+
+              return (
+                <div className="relative min-w-max pl-12">
+                  {/* y-axis labels + zero line (plot area is 11rem tall, zero at its middle) */}
+                  <span className="absolute left-0 top-0 text-[9px] font-mono text-slate-500">+{formatNumber(maxAbs, 2)}M</span>
+                  <span className="absolute left-0 text-[9px] font-mono text-slate-400" style={{ top: '5.2rem' }}>0</span>
+                  <span className="absolute left-0 text-[9px] font-mono text-slate-500" style={{ top: '10.2rem' }}>
+                    -{formatNumber(maxAbs, 2)}M
+                  </span>
+                  <div
+                    className="absolute left-12 right-0 border-t border-slate-500/70 pointer-events-none"
+                    style={{ top: '5.5rem' }}
+                  />
+                  <div className="flex gap-1.5">
+                    {rows.map((r) => {
+                      const isSpot = spotPrice > 0 && Math.abs(r.strike - spotPrice) <= step;
+                      return (
+                        <div key={r.strike} className="flex-1 min-w-[42px] flex flex-col items-center group">
+                          <div className="w-full flex gap-0.5 h-44">
+                            {bar(r.derivedCallShift, 'bg-emerald-500/80 group-hover:bg-emerald-400', 'Call OI Δ')}
+                            {bar(r.derivedPutShift, 'bg-rose-500/80 group-hover:bg-rose-400', 'Put OI Δ')}
+                          </div>
+                          <span
+                            className={`mt-1 text-[9px] font-mono whitespace-nowrap ${isSpot ? 'text-cyan-300 font-bold' : 'text-slate-400'}`}
+                          >
+                            ${formatNumber(r.strike, 0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right 1 Col: Overall Shift Pie Chart in Numbers */}
