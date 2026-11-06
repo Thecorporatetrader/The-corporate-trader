@@ -14,6 +14,7 @@ export const navItems = [
   { label: 'Home', href: '/' },
   { label: 'Market Watch', href: '/post' },
   { label: 'Options Matrix', href: '/options' },
+  { label: 'Competitions', href: '/competitions' },
 ] as const;
 
 export const helpItem = { label: 'Help', href: '/help' };

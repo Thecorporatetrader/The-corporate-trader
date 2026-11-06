@@ -33,7 +33,7 @@ export default function OptionsPage() {
       {/* 2. DEDICATED SCROLLING CONTAINER: Only below content scrolls */}
       <div className="flex-1 w-full overflow-y-auto p-3 sm:p-5 lg:p-6 custom-scrollbar">
         <div className="max-w-7xl mx-auto pb-12">
-          <OptionsMatrix initialAsset="BTC" className="w-full" />
+          <OptionsMatrix initialAsset="XAUT" className="w-full" />
         </div>
       </div>
     </main>

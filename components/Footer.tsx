@@ -21,6 +21,7 @@ const exploreLinks: FooterLink[] = [
 const resourceLinks: FooterLink[] = [
   { label: 'Library', href: '/library' },
   { label: 'Market Watch', href: '/post' },
+  { label: 'Competitions', href: '/competitions' },
   { label: 'Help', href: '/help' },
   { label: 'FAQ', href: '/faq' },
   { label: 'Privacy Policy', href: '/privacy-policy' },
